@@ -392,6 +392,8 @@ function createBlock(x, z, delay = 0) {
 
 function createPlayer() {
     player = new THREE.Group();
+    innerPlayer = new THREE.Group();
+    player.add(innerPlayer);
     
     // 材质
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa }); // 肤色
@@ -432,13 +434,13 @@ function createPlayer() {
     tieRight.rotation.x = Math.PI / 2;
     headGroup.add(tieRight);
 
-    player.add(headGroup);
+    innerPlayer.add(headGroup);
 
     // 2. 身体
     const bodyGeo = new THREE.CylinderGeometry(0.25, 0.3, 0.8, 32);
     const body = new THREE.Mesh(bodyGeo, redMat); // 红肚兜/衣服
     body.position.y = 0.9;
-    player.add(body);
+    innerPlayer.add(body);
 
     // 3. 乾坤圈 (脖子上的金环)
     const ringGeo = new THREE.TorusGeometry(0.32, 0.04, 16, 32);
@@ -446,7 +448,7 @@ function createPlayer() {
     ring.position.y = 1.25;
     ring.rotation.x = Math.PI / 2; // 水平放置
     ring.rotation.y = -0.2; // 稍微歪一点
-    player.add(ring);
+    innerPlayer.add(ring);
 
     // 4. 混天绫 (飘带 - 简化为两条弯曲的带子)
     // 这里用细长的 Box 模拟飘在身后的样子
@@ -456,7 +458,7 @@ function createPlayer() {
     // 弯曲一点造型
     ribbon.rotation.z = 0.1;
     ribbon.rotation.y = 0.2;
-    player.add(ribbon);
+    innerPlayer.add(ribbon);
 
     // 5. 风火轮 (脚下的火轮)
     player.userData.wheels = [];
@@ -466,14 +468,14 @@ function createPlayer() {
     const wheelLeft = new THREE.Mesh(wheelGeo, fireMat);
     wheelLeft.position.set(-0.3, 0.25, 0);
     wheelLeft.rotation.y = Math.PI / 2; // 竖着
-    player.add(wheelLeft);
+    innerPlayer.add(wheelLeft);
     player.userData.wheels.push(wheelLeft);
 
     // 右轮
     const wheelRight = new THREE.Mesh(wheelGeo, fireMat);
     wheelRight.position.set(0.3, 0.25, 0);
     wheelRight.rotation.y = Math.PI / 2;
-    player.add(wheelRight);
+    innerPlayer.add(wheelRight);
     player.userData.wheels.push(wheelRight);
 
     // 设置整体位置
@@ -498,8 +500,13 @@ function spawnNextBlock(animate = true) {
     let x = lastBlock.position.x;
     let z = lastBlock.position.z;
     
-    if (direction === 'x') x -= distance;
-    else z -= distance;
+    if (direction === 'x') {
+        x -= distance;
+        targetRotationY = -Math.PI / 2; // 面向 -x
+    } else {
+        z -= distance;
+        targetRotationY = Math.PI; // 面向 -z
+    }
     
     createBlock(x, z, animate ? 1 : 0);
 }
@@ -523,7 +530,7 @@ function onMouseDown(e) {
     audioManager.startCharge();
     
     // 玩家压缩动画（重置缩放）
-    player.scale.set(1, 1, 1);
+    innerPlayer.scale.set(1, 1, 1);
 }
 
 function onMouseUp(e) {
@@ -556,14 +563,8 @@ function jump(duration) {
     velocity.z = dir.z * power * 0.055;
     velocity.y = power * 0.08; 
     
-    // 旋转逻辑
-    if (dir.x !== 0) {
-        rotationVelocity.z = -0.15; 
-        rotationVelocity.x = 0;
-    } else {
-        rotationVelocity.x = -0.15;
-        rotationVelocity.z = 0;
-    }
+    // 旋转逻辑 - 统一绕局部 X 轴翻滚 (向前滚)
+    rotateSpeed = -0.15;
     
     // 恢复形状动画
     animations.push({
@@ -572,11 +573,11 @@ function jump(duration) {
         update: function() {
             this.time++;
             const p = this.time / this.duration;
-            player.scale.y = config.maxCompression + (1 - config.maxCompression) * Easing.easeOutQuad(p);
+            innerPlayer.scale.y = config.maxCompression + (1 - config.maxCompression) * Easing.easeOutQuad(p);
             // x, z 也要恢复
-            const scaleXZ = 1 + (config.maxCompression - player.scale.y) / 2;
-            player.scale.x = scaleXZ;
-            player.scale.z = scaleXZ;
+            const scaleXZ = 1 + (config.maxCompression - innerPlayer.scale.y) / 2;
+            innerPlayer.scale.x = scaleXZ;
+            innerPlayer.scale.z = scaleXZ;
             return p >= 1;
         }
     });
@@ -593,25 +594,36 @@ function animate() {
     
     // 蓄力表现
     if (isCharging && isGameRunning) {
-        if (player.scale.y > config.maxCompression) {
-            player.scale.y -= 0.015;
-            player.scale.x += 0.01;
-            player.scale.z += 0.01;
+        if (innerPlayer.scale.y > config.maxCompression) {
+            innerPlayer.scale.y -= 0.015;
+            innerPlayer.scale.x += 0.01;
+            innerPlayer.scale.z += 0.01;
         }
     }
     
     // 物理更新
     if (isGameRunning) {
+        // 平滑更新朝向
+        if (player.rotation.y !== targetRotationY) {
+            // 简单的线性插值
+            let delta = targetRotationY - player.rotation.y;
+            // 处理角度回绕问题 (例如 PI 到 -PI) - 这里的场景主要是 0 到 -PI/2 到 -PI，一般不需要复杂处理
+            if (Math.abs(delta) > 0.01) {
+                player.rotation.y += delta * 0.1;
+            } else {
+                player.rotation.y = targetRotationY;
+            }
+        }
+
         if (velocity.y !== 0 || player.position.y > 1) {
             player.position.x += velocity.x;
             player.position.z += velocity.z;
             player.position.y += velocity.y;
             velocity.y -= config.gravity; 
             
-            // 简单的跳跃旋转
+            // 简单的跳跃旋转 - 绕局部 X 轴
             if (velocity.y > 0 || player.position.y > 1.5) {
-                player.rotation.x += rotationVelocity.x;
-                player.rotation.z += rotationVelocity.z;
+                innerPlayer.rotation.x += rotateSpeed;
             }
 
             // 风火轮旋转动画
@@ -627,8 +639,8 @@ function animate() {
                     // 成功着陆
                     player.position.y = 1;
                     velocity = { x: 0, y: 0, z: 0 };
-                    rotationVelocity = { x: 0, z: 0 };
-                    player.rotation.set(0, 0, 0);
+                    rotateSpeed = 0;
+                    innerPlayer.rotation.x = 0; // 重置翻滚
                     
                     // 着陆后的挤压动画
                     animations.push({
@@ -639,9 +651,9 @@ function animate() {
                             // 简单的弹一下：压扁 -> 恢复
                             const p = this.time / this.duration;
                             const y = 1 - Math.sin(p * Math.PI) * 0.2;
-                            player.scale.y = y;
-                            player.scale.x = 1 + (1-y)/2;
-                            player.scale.z = 1 + (1-y)/2;
+                            innerPlayer.scale.y = y;
+                            innerPlayer.scale.x = 1 + (1-y)/2;
+                            innerPlayer.scale.z = 1 + (1-y)/2;
                             return p >= 1;
                         }
                     });
