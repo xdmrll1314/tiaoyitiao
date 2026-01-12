@@ -12,11 +12,18 @@
         <div id="combo-text">连击 x2</div>
     </div>
     <div id="touch-indicator">长按蓄力 · 松开跳跃</div>
+    <div id="leaderboard">
+        <h3>在线排名</h3>
+        <ul id="leaderboard-list">
+            <!-- 动态生成 -->
+        </ul>
+    </div>
     <div id="game-over">
         <h2>游戏结束</h2>
         <div id="final-score">0</div>
         <button id="restart-btn">再来一次</button>
     </div>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="game.js"></script>
 </body>

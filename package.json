@@ -1,0 +1,24 @@
+{
+  "name": "2026011201",
+  "version": "1.0.0",
+  "description": "这是一个基于 HTML5 和 Three.js 开发的 3D \"跳一跳\" 小游戏。玩家需要控制一个小方块，通过蓄力跳跃，从一个平台跳到另一个平台，挑战更高的分数。",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xdmrll1314/tiaoyitiao.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/xdmrll1314/tiaoyitiao/issues"
+  },
+  "homepage": "https://github.com/xdmrll1314/tiaoyitiao#readme",
+  "dependencies": {
+    "express": "^4.22.1",
+    "socket.io": "^4.8.3"
+  }
+}
