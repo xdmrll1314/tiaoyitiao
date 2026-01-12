@@ -12,12 +12,85 @@
         <div id="combo-text">连击 x2</div>
     </div>
     <div id="touch-indicator">长按蓄力 · 松开跳跃</div>
+    <button id="room-toggle">多人</button>
+    <button id="lb-toggle">排行</button>
+    <div id="room-ui">
+        <div class="mp-actions">
+            <button id="btn-quick">快速对战</button>
+            <button id="btn-create">创建房间并邀请</button>
+            <button id="btn-code">输入房间码</button>
+        </div>
+        <div class="mp-controls">
+            <span id="room-display"></span>
+            <button id="btn-ready">准备</button>
+            <button id="btn-start">开始</button>
+        </div>
+    </div>
+    <div id="mp-join-modal" class="hidden">
+        <div class="mp-modal">
+            <h3>加入房间</h3>
+            <input id="input-room-code" placeholder="房间码（6位）" maxlength="12">
+            <input id="input-name" placeholder="昵称（可选）" maxlength="12">
+            <div class="mp-modal-actions">
+                <button id="modal-join">加入</button>
+                <button id="modal-cancel">取消</button>
+            </div>
+        </div>
+    </div>
+    <div id="mp-overlay" class="hidden">
+        <div class="mp-panel">
+            <div class="mp-header">
+                <div class="mp-title">多人对战</div>
+                <button id="mp-close">关闭</button>
+            </div>
+            <div class="mp-tabs">
+                <button class="mp-tab active" data-tab="quick">快速加入</button>
+                <button class="mp-tab" data-tab="create">创建邀请</button>
+                <button class="mp-tab" data-tab="join">房间码</button>
+            </div>
+            <div class="mp-sections">
+                <div class="mp-section" data-section="quick">
+                    <button id="ov-quick">加入公共房间</button>
+                </div>
+                <div class="mp-section hidden" data-section="create">
+                    <div class="form-row">
+                        <button id="ov-create">创建并复制邀请链接</button>
+                    </div>
+                </div>
+                <div class="mp-section hidden" data-section="join">
+                    <div class="form-row">
+                        <input id="ov-room-code" placeholder="房间码">
+                    </div>
+                    <div class="form-row">
+                        <input id="ov-name" placeholder="昵称（可选）">
+                    </div>
+                    <div class="form-row">
+                        <button id="ov-join">加入</button>
+                    </div>
+                </div>
+            </div>
+            <div id="mp-players" class="mp-players"></div>
+            <div class="mp-bottom">
+                <button id="ov-ready">准备</button>
+                <button id="ov-start">开始</button>
+            </div>
+        </div>
+    </div>
+    <div id="mp-leaderboard"></div>
+    <div id="mp-status"></div>
     <div id="game-over">
         <h2>游戏结束</h2>
         <div id="final-score">0</div>
         <button id="restart-btn">再来一次</button>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="core/config.js"></script>
+    <script src="core/easing.js"></script>
+    <script src="net/ws.js"></script>
+    <script src="ui/leaderboard.js"></script>
+    
+    <script src="ui/room.js"></script>
+    <script src="physics/step.js"></script>
     <script src="game.js"></script>
 </body>
 </html>

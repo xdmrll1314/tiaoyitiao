@@ -1,5 +1,4 @@
-// 游戏配置
-const config = {
+const config = window.Config || {
     background: 0xffffff,
     groundSize: { width: 10, height: 5 },
     cubeSize: { width: 4, height: 2, depth: 4 },
@@ -11,8 +10,7 @@ const config = {
     particlesCount: 20
 };
 
-// 工具函数：简单的缓动
-const Easing = {
+const Easing = window.Easing || {
     easeOutQuad: t => t * (2 - t),
     easeOutElastic: t => {
         const c4 = (2 * Math.PI) / 3;
@@ -206,7 +204,23 @@ let chargeStartTime = 0;
 let velocity = { x: 0, y: 0, z: 0 };
 let rotateSpeed = 0; // 统一的翻滚速度
 let targetRotationY = 0; // 目标朝向
-let animations = []; // 存储简单的动画对象 { update: function() -> boolean }
+let animations = [];
+let useMultiplayer = false;
+let lastInputDownTs = 0;
+const remotePlayers = new Map();
+
+function ensureRemotePlayer(id, colorHex) {
+    if (remotePlayers.has(id)) return remotePlayers.get(id);
+    const g = new THREE.Group();
+    const geo = new THREE.SphereGeometry(0.3, 16, 16);
+    const mat = new THREE.MeshLambertMaterial({ color: colorHex || 0x409EFF });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = 1;
+    g.add(mesh);
+    scene.add(g);
+    remotePlayers.set(id, g);
+    return g;
+}
 
 function init() {
     // 场景
@@ -224,7 +238,8 @@ function init() {
     // 渲染器
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha: true 允许透明背景
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    renderer.shadowMap.enabled = !isMobile;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
 
@@ -238,7 +253,7 @@ function init() {
 
     const dirLightObj = new THREE.DirectionalLight(0xffffff, 0.6);
     dirLightObj.position.set(10, 30, 20);
-    dirLightObj.castShadow = true;
+    dirLightObj.castShadow = !isMobile;
     dirLightObj.shadow.mapSize.width = 2048;
     dirLightObj.shadow.mapSize.height = 2048;
     dirLightObj.shadow.camera.left = -20;
@@ -252,15 +267,20 @@ function init() {
     audioManager = new AudioManager();
     particleSystem = new ParticleSystem(scene);
     ResourceManager.init(); // 初始化资源
+    if (isMobile) {
+        config.particlesCount = Math.min(config.particlesCount || 20, 10);
+    }
 
     resetGame();
 
     // 事件
     window.addEventListener('resize', onWindowResize, false);
     window.addEventListener('keydown', (e) => {
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) return;
         if (e.code === 'Space' && !e.repeat) onMouseDown(e);
     });
     window.addEventListener('keyup', (e) => {
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) return;
         if (e.code === 'Space') onMouseUp(e);
     });
     
@@ -282,6 +302,16 @@ function init() {
         document.getElementById('game-over').style.display = 'none';
         resetGame();
     });
+
+    if (window.MultiplayerNet) {
+        window.MultiplayerNet.onStateUpdate((msg) => {
+            msg.players.forEach(p => {
+                if (!player || !p || !p.id) return;
+                const rp = ensureRemotePlayer(p.id, p.color);
+                rp.position.set(p.x || 0, 1, p.z || 0);
+            });
+        });
+    }
 
     animate();
 }
@@ -523,6 +553,9 @@ function onWindowResize() {
 }
 
 function onMouseDown(e) {
+    const t = e && e.target;
+    if (t && (t.closest('#room-ui') || t.closest('#mp-join-modal') || t.closest('#mp-overlay') || t.closest('#mp-leaderboard') || t.closest('#lb-toggle') || t.closest('#room-toggle') || t.closest('#mp-status') || t.tagName === 'BUTTON' || t.closest('button'))) return;
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) return;
     if (!isGameRunning || velocity.y !== 0 || player.position.y < 1) return;
     
     isCharging = true;
@@ -531,9 +564,16 @@ function onMouseDown(e) {
     
     // 玩家压缩动画（重置缩放）
     innerPlayer.scale.set(1, 1, 1);
+    lastInputDownTs = chargeStartTime;
+    if (useMultiplayer && window.MultiplayerNet && window.MultiplayerNet.connected) {
+        window.MultiplayerNet.inputDown();
+    }
 }
 
 function onMouseUp(e) {
+    const t = e && e.target;
+    if (t && (t.closest('#room-ui') || t.closest('#mp-join-modal') || t.closest('#mp-overlay') || t.closest('#mp-leaderboard') || t.closest('#lb-toggle') || t.closest('#room-toggle') || t.closest('#mp-status') || t.tagName === 'BUTTON' || t.closest('button'))) return;
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) return;
     if (!isGameRunning || !isCharging) return;
     
     isCharging = false;
@@ -541,7 +581,11 @@ function onMouseUp(e) {
     audioManager.playJump();
     
     const chargeDuration = Date.now() - chargeStartTime;
-    jump(chargeDuration);
+    if (useMultiplayer && window.MultiplayerNet && window.MultiplayerNet.connected) {
+        window.MultiplayerNet.inputUp(chargeDuration);
+    } else {
+        jump(chargeDuration);
+    }
 }
 
 function jump(duration) {
@@ -782,6 +826,9 @@ function updateScoreUI() {
         comboEl.style.opacity = 1;
     } else {
         comboEl.style.opacity = 0;
+    }
+    if (useMultiplayer && window.MultiplayerNet && window.MultiplayerNet.connected) {
+        window.MultiplayerNet.sendScore(score, combo);
     }
 }
 
