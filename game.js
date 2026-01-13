@@ -220,7 +220,7 @@ function startSpectatorMode() {
         statusDiv.style.display = 'inline-block';
         scoreContainer.appendChild(statusDiv);
     }
-    statusDiv.innerText = '观战中';
+    statusDiv.innerText = '查看榜单模式';
 
     // 连接服务器
     networkManager.connect('Spectator');
