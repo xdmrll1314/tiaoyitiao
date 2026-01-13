@@ -4,6 +4,11 @@
   "description": "这是一个基于 HTML5 和 Three.js 开发的 3D \"跳一跳\" 小游戏。玩家需要控制一个小方块，通过蓄力跳跃，从一个平台跳到另一个平台，挑战更高的分数。",
   "main": "game.js",
   "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -20,5 +25,10 @@
   "dependencies": {
     "express": "^4.22.1",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5"
   }
 }

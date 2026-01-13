@@ -17,6 +17,11 @@ let targetRotationY = 0;
 let animations = []; 
 let nickname = 'Unknown';
 let powerBar, powerBarContainer; // 缓存 DOM 元素
+let guideOverlay, guideCloseBtn, guideNeverBtn;
+let connectionStatusBar, audioToggleBtn;
+let audioEnabled = true;
+let hasSeenGuide = false;
+let connectionStatusTimer = null;
 
 let cameraShake = { x: 0, y: 0, z: 0 }; // 相机震动
 let cameraZoom = 1; // 相机缩放
@@ -77,12 +82,27 @@ function init() {
     rippleSystem = new RippleSystem(scene);
     ResourceManager.init();
     
+    // 读取音频偏好
+    const storedAudio = localStorage.getItem(config.audioStorageKey);
+    audioEnabled = storedAudio !== 'false';
+    audioManager.setEnabled(audioEnabled);
+    
     // 初始化网络管理器（传入场景引用）
     networkManager = new NetworkManager(scene);
+    networkManager.setStatusHandler(updateConnectionStatusUI);
+    networkManager.setScoreGetter(() => score);
     
     // 缓存 DOM
     powerBar = document.getElementById('power-bar');
     powerBarContainer = document.getElementById('power-bar-container');
+    guideOverlay = document.getElementById('guide-overlay');
+    guideCloseBtn = document.getElementById('guide-close');
+    guideNeverBtn = document.getElementById('guide-never');
+    connectionStatusBar = document.getElementById('connection-status');
+    audioToggleBtn = document.getElementById('audio-toggle');
+
+    hasSeenGuide = localStorage.getItem(config.guideStorageKey) === '1';
+    updateAudioToggleUI();
 
     // resetGame();
 
@@ -124,6 +144,17 @@ function init() {
         resetGame();
     });
 
+    if (audioToggleBtn) {
+        audioToggleBtn.addEventListener('click', toggleAudio);
+    }
+
+    if (guideCloseBtn) {
+        guideCloseBtn.addEventListener('click', () => hideGuide(true));
+    }
+    if (guideNeverBtn) {
+        guideNeverBtn.addEventListener('click', () => hideGuide(true, true));
+    }
+
     // 登录逻辑
     document.getElementById('start-game-btn').addEventListener('click', () => {
         const input = document.getElementById('nickname-input');
@@ -132,6 +163,7 @@ function init() {
             nickname = val;
             document.getElementById('login-modal').style.display = 'none';
             startGame();
+            showGuideIfNeeded();
         } else {
             alert('请输入昵称');
         }
@@ -143,6 +175,71 @@ function init() {
 function startGame() {
     networkManager.connect(nickname);
     resetGame();
+}
+
+function showGuideIfNeeded() {
+    if (!guideOverlay || hasSeenGuide) return;
+    guideOverlay.style.display = 'flex';
+}
+
+function hideGuide(markSeen = false, remember = false) {
+    if (guideOverlay) guideOverlay.style.display = 'none';
+    if (markSeen) {
+        hasSeenGuide = true;
+        if (remember) {
+            localStorage.setItem(config.guideStorageKey, '1');
+        }
+    }
+}
+
+function toggleAudio() {
+    audioEnabled = !audioEnabled;
+    audioManager.setEnabled(audioEnabled);
+    localStorage.setItem(config.audioStorageKey, audioEnabled ? 'true' : 'false');
+    updateAudioToggleUI();
+}
+
+function updateAudioToggleUI() {
+    if (!audioToggleBtn) return;
+    audioToggleBtn.innerText = audioEnabled ? '🔊 音效开' : '🔇 静音';
+    audioToggleBtn.setAttribute('aria-pressed', audioEnabled ? 'false' : 'true');
+}
+
+function updateConnectionStatusUI(status) {
+    if (!connectionStatusBar) return;
+    let text = '';
+    switch (status) {
+        case 'connecting':
+            text = '正在连接...';
+            break;
+        case 'reconnecting':
+            text = '正在重连...';
+            break;
+        case 'disconnected':
+            text = '连接已断开，重试中...';
+            break;
+        case 'error':
+            text = '连接失败，请检查网络';
+            break;
+        case 'connected':
+        default:
+            text = '已连接';
+            break;
+    }
+    connectionStatusBar.innerText = text;
+    connectionStatusBar.dataset.state = status;
+    connectionStatusBar.style.opacity = status === 'connected' ? '0' : '1';
+    if (status === 'connected') {
+        if (networkManager) {
+            networkManager.createNameTag(networkManager.getId(), nickname, true);
+        }
+        clearTimeout(connectionStatusTimer);
+        connectionStatusTimer = setTimeout(() => {
+            connectionStatusBar.style.opacity = '0';
+        }, 1200);
+    } else {
+        clearTimeout(connectionStatusTimer);
+    }
 }
 
 // 网络相关函数已移至 NetworkManager 类
@@ -179,8 +276,11 @@ function resetGame() {
     // 通知服务器重置分数
     if (networkManager) {
         networkManager.emitScore(0);
+        const selfId = networkManager.getId();
+        if (selfId) {
         // 重置时也更新一下我的名牌 (防止断线重连等情况)
-        networkManager.createNameTag(networkManager.getId(), nickname, true);
+            networkManager.createNameTag(selfId, nickname, true);
+        }
     }
 
     // 初始方块
@@ -281,6 +381,7 @@ function onWindowResize() {
 function onMouseDown(e) {
     if (!isGameRunning || velocity.y !== 0 || player.position.y < 1) return;
     
+    hideGuide(true);
     isCharging = true;
     chargeStartTime = Date.now();
     audioManager.startCharge();

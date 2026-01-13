@@ -13,5 +13,7 @@ const config = {
     movementEmitInterval: 50, // 位置更新发送间隔（毫秒）
     // 阴影配置
     shadowMapSize: 1024,
-    shadowCameraSize: 15
+    shadowCameraSize: 15,
+    guideStorageKey: 'jump-guide-seen',
+    audioStorageKey: 'jump-audio-enabled'
 };

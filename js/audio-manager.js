@@ -4,9 +4,12 @@ class AudioManager {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.oscillator = null;
         this.gainNode = null;
+        this.enabled = true;
+        this.masterVolume = 1;
     }
 
     playTone(freq, type, duration, startTime = 0) {
+        if (!this.enabled) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -14,8 +17,12 @@ class AudioManager {
         osc.type = type;
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime + startTime);
         
-        gain.gain.setValueAtTime(0.1, this.ctx.currentTime + startTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + startTime + duration);
+        const startGain = 0.1 * this.masterVolume;
+        gain.gain.setValueAtTime(startGain, this.ctx.currentTime + startTime);
+        gain.gain.exponentialRampToValueAtTime(
+            Math.max(0.001, startGain * 0.01),
+            this.ctx.currentTime + startTime + duration
+        );
         
         osc.connect(gain);
         gain.connect(this.ctx.destination);
@@ -25,6 +32,7 @@ class AudioManager {
     }
 
     startCharge() {
+        if (!this.enabled) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
         this.oscillator = this.ctx.createOscillator();
         this.gainNode = this.ctx.createGain();
@@ -33,7 +41,7 @@ class AudioManager {
         this.oscillator.frequency.setValueAtTime(150, this.ctx.currentTime);
         this.oscillator.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 2);
         
-        this.gainNode.gain.setValueAtTime(0.05, this.ctx.currentTime);
+        this.gainNode.gain.setValueAtTime(0.05 * this.masterVolume, this.ctx.currentTime);
         
         this.oscillator.connect(this.gainNode);
         this.gainNode.connect(this.ctx.destination);
@@ -72,5 +80,25 @@ class AudioManager {
     playFail() {
         this.playTone(100, 'sawtooth', 0.5);
         this.playTone(80, 'sawtooth', 0.5, 0.2);
+    }
+
+    setEnabled(flag) {
+        this.enabled = !!flag;
+        if (!this.enabled) {
+            this.stopCharge();
+        }
+    }
+
+    toggleEnabled() {
+        this.setEnabled(!this.enabled);
+        return this.enabled;
+    }
+
+    setVolume(val) {
+        this.masterVolume = Math.min(1, Math.max(0, val));
+    }
+
+    isEnabled() {
+        return this.enabled;
     }
 }

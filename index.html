@@ -11,6 +11,10 @@
         <div id="score">0</div>
         <div id="combo-text">连击 x2</div>
     </div>
+    <div id="top-actions">
+        <button id="audio-toggle" aria-pressed="false">🔊 音效开</button>
+    </div>
+    <div id="connection-status" aria-live="polite" aria-atomic="true"></div>
     <div id="login-modal">
         <div class="login-box">
             <h2>欢迎来到跳一跳</h2>
@@ -32,6 +36,20 @@
         <h2>游戏结束</h2>
         <div id="final-score">0</div>
         <button id="restart-btn">再来一次</button>
+    </div>
+    <div id="guide-overlay">
+        <div class="guide-box">
+            <h2>快速上手</h2>
+            <ol>
+                <li>长按屏幕或空格键蓄力，松开即可跳跃。</li>
+                <li>尽量落在平台中心，获得连击与高分。</li>
+                <li>多人在线：可看到其他玩家影子，排行榜实时更新。</li>
+            </ol>
+            <div class="guide-actions">
+                <button id="guide-close">我知道了</button>
+                <button id="guide-never">不再提示</button>
+            </div>
+        </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

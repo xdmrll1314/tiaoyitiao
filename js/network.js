@@ -6,15 +6,43 @@ class NetworkManager {
         this.remotePlayers = {}; // { socketId: mesh }
         this.nameTags = {}; // { socketId: htmlElement }
         this.lastMovementEmitTime = 0;
+        this.statusHandler = null;
+        this.scoreGetter = null;
+        this.nickname = '';
     }
 
     connect(nickname) {
+        this.nickname = nickname;
+        this.notifyStatus('connecting');
         this.socket = io();
         this.setupHandlers();
         
         // 连接成功后发送昵称
         this.socket.on('connect', () => {
-            this.socket.emit('setNickname', nickname);
+            this.notifyStatus('connected');
+            this.socket.emit('setNickname', this.nickname);
+            const currentScore = this.scoreGetter ? this.scoreGetter() : 0;
+            this.socket.emit('scoreUpdate', currentScore);
+        });
+
+        this.socket.on('disconnect', () => {
+            this.notifyStatus('disconnected');
+        });
+
+        this.socket.io.on('reconnect_attempt', () => {
+            this.notifyStatus('reconnecting');
+        });
+
+        this.socket.io.on('reconnect', () => {
+            this.notifyStatus('connected');
+            this.clearRemoteState();
+            this.socket.emit('setNickname', this.nickname);
+            const currentScore = this.scoreGetter ? this.scoreGetter() : 0;
+            this.socket.emit('scoreUpdate', currentScore);
+        });
+
+        this.socket.io.on('reconnect_failed', () => {
+            this.notifyStatus('error');
         });
     }
 
@@ -95,7 +123,7 @@ class NetworkManager {
             }
         });
 
-        scene.add(mesh);
+        this.scene.add(mesh);
         this.remotePlayers[id] = mesh;
         
         // 创建名牌
@@ -106,7 +134,7 @@ class NetworkManager {
 
     removeRemotePlayer(id) {
         if (this.remotePlayers[id]) {
-            scene.remove(this.remotePlayers[id]);
+            this.scene.remove(this.remotePlayers[id]);
             // 清理
             this.remotePlayers[id].traverse(child => {
                  if (child.isMesh) {
@@ -259,5 +287,23 @@ class NetworkManager {
 
     getId() {
         return this.socket ? this.socket.id : null;
+    }
+
+    setStatusHandler(handler) {
+        this.statusHandler = handler;
+    }
+
+    notifyStatus(status) {
+        if (typeof this.statusHandler === 'function') {
+            this.statusHandler(status);
+        }
+    }
+
+    setScoreGetter(fn) {
+        this.scoreGetter = fn;
+    }
+
+    clearRemoteState() {
+        Object.keys(this.remotePlayers).forEach((id) => this.removeRemotePlayer(id));
     }
 }
