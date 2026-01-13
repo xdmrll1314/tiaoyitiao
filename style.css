@@ -11,6 +11,14 @@ html, body {
     -webkit-user-select: none;
 }
 
+/* 主播模式透明背景 */
+body.streamer-mode {
+    background: transparent !important;
+}
+body.streamer-mode canvas {
+    background: transparent !important;
+}
+
 #score-container {
     position: absolute;
     top: 15%;
@@ -109,22 +117,38 @@ html, body {
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
-#leaderboard h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #333;
-    text-align: center;
+.lb-tabs {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
     border-bottom: 1px solid rgba(0,0,0,0.1);
     padding-bottom: 5px;
 }
 
-#leaderboard-list {
+.lb-tab {
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: #999;
+    padding: 2px 5px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.lb-tab.active {
+    color: #333;
+    border-bottom: 2px solid #667eea;
+}
+
+.lb-list {
     list-style: none;
     padding: 0;
     margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
 }
 
-#leaderboard-list li {
+.lb-list li {
     display: flex;
     justify-content: space-between;
     font-size: 14px;
@@ -132,7 +156,7 @@ html, body {
     color: #555;
 }
 
-#leaderboard-list li span:first-child {
+.lb-list li span:first-child {
     font-weight: bold;
     color: #333;
 }

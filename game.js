@@ -193,7 +193,291 @@ function init() {
         }
     });
 
+    // 检查是否为主播模式
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'streamer') {
+        initStreamerMode();
+    }
+
     animate();
+}
+
+function initStreamerMode() {
+    // 隐藏登录框
+    document.getElementById('login-modal').style.display = 'none';
+    
+    // 设置背景透明
+    document.body.classList.add('streamer-mode');
+    
+    // 自动登录
+    nickname = '主播';
+    startGame();
+    
+    // 隐藏不必要的 UI
+    if (audioToggleBtn) audioToggleBtn.style.display = 'none';
+    const guide = document.getElementById('touch-indicator');
+    if (guide) guide.style.display = 'none';
+
+    // 初始化直播模拟器
+    initLiveSimulator();
+}
+
+function initLiveSimulator() {
+    const simDiv = document.createElement('div');
+    simDiv.style.position = 'absolute';
+    simDiv.style.bottom = '10px';
+    simDiv.style.right = '10px';
+    simDiv.style.background = 'rgba(0,0,0,0.7)';
+    simDiv.style.padding = '10px';
+    simDiv.style.borderRadius = '8px';
+    simDiv.style.color = '#fff';
+    simDiv.style.zIndex = '100';
+    simDiv.style.display = 'flex';
+    simDiv.style.flexDirection = 'column';
+    simDiv.style.gap = '5px';
+    
+    simDiv.innerHTML = `
+        <div style="font-weight:bold;margin-bottom:5px;">直播互动模拟器</div>
+        <div style="display:flex;gap:5px;">
+            <input type="text" id="sim-user" placeholder="用户名" style="width:60px;padding:3px;">
+            <input type="text" id="sim-content" placeholder="弹幕内容" style="width:100px;padding:3px;">
+            <button id="sim-send-chat" style="padding:3px 8px;">发送弹幕</button>
+        </div>
+        <div style="display:flex;gap:5px;">
+             <button id="sim-gift-1" style="flex:1;padding:3px;">送爱心</button>
+             <button id="sim-gift-2" style="flex:1;padding:3px;">送火箭</button>
+        </div>
+    `;
+    
+    document.body.appendChild(simDiv);
+    
+    document.getElementById('sim-send-chat').addEventListener('click', () => {
+        const user = document.getElementById('sim-user').value || '观众' + Math.floor(Math.random()*100);
+        const content = document.getElementById('sim-content').value || '加入';
+        onLiveComment(user, content);
+    });
+    
+    document.getElementById('sim-gift-1').addEventListener('click', () => {
+        const user = document.getElementById('sim-user').value || '老板';
+        onLiveGift(user, 'heart');
+    });
+
+    document.getElementById('sim-gift-2').addEventListener('click', () => {
+        const user = document.getElementById('sim-user').value || '土豪';
+        onLiveGift(user, 'rocket');
+    });
+}
+
+function onLiveComment(user, content) {
+    console.log(`[直播弹幕] ${user}: ${content}`);
+    
+    // 简单的关键词逻辑
+    if (content.includes('加入') || content.includes('1')) {
+        spawnAudienceCharacter(user);
+    }
+    
+    // 显示弹幕气泡（简单实现，仅在控制台或后续添加 UI）
+    showToast(`${user}: ${content}`);
+}
+
+function onLiveGift(user, type) {
+    console.log(`[直播礼物] ${user} 送出了 ${type}`);
+    
+    showToast(`${user} 送出了 ${type === 'heart' ? '❤️' : '🚀'}!`);
+    
+    if (type === 'rocket') {
+        // 触发全屏特效
+        triggerFireworks();
+    } else {
+        // 小特效
+        spawnHeartEffect();
+    }
+}
+
+function spawnAudienceCharacter(name) {
+    // 在当前方块附近生成一个装饰性小人
+    if (!player) return;
+    
+    const color = Math.random() * 0xffffff;
+    // 临时创建，不走 createCharacterMesh 以免太复杂，用简单方块代替
+    const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+    const material = new THREE.MeshLambertMaterial({ color: color });
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // 随机位置（在主角周围）
+    const offsetAngle = Math.random() * Math.PI * 2;
+    const distance = 3 + Math.random() * 3;
+    mesh.position.x = player.position.x + Math.cos(offsetAngle) * distance;
+    mesh.position.z = player.position.z + Math.sin(offsetAngle) * distance;
+    mesh.position.y = 10; // 从天而降
+    
+    scene.add(mesh);
+    
+    // 简单的下落动画
+    const anim = {
+        mesh: mesh,
+        velocity: 0,
+        y: 10,
+        targetY: 0.4, // 地面高度
+        active: true
+    };
+    
+    // 临时加个动画循环处理它（为了演示简单，直接挂在 animations 列表里）
+    animations.push({
+        time: 0,
+        duration: 200, // 存活时间
+        update: function() {
+            if (mesh.position.y > anim.targetY) {
+                anim.velocity -= 0.05; // 重力
+                mesh.position.y += anim.velocity;
+            } else {
+                if (anim.velocity < -0.1) {
+                    anim.velocity = -anim.velocity * 0.5; // 弹跳
+                    mesh.position.y = anim.targetY + 0.1;
+                } else {
+                    mesh.position.y = anim.targetY;
+                    // 偶尔跳一下
+                    if (Math.random() < 0.02) {
+                        anim.velocity = 0.5;
+                    }
+                }
+            }
+            
+            // 慢慢旋转
+            mesh.rotation.y += 0.05;
+            
+            this.time++;
+            if (this.time > this.duration) {
+                // 消失动画
+                mesh.scale.multiplyScalar(0.9);
+                if (mesh.scale.x < 0.1) {
+                    scene.remove(mesh);
+                    return true;
+                }
+            }
+            return false;
+        }
+    });
+    
+    // 名字标签
+    if (networkManager) {
+        const tag = networkManager.createNameTag('aud_' + Date.now(), name, false);
+        // 这里有个小问题，createNameTag 需要 ID 且会根据 remotePlayers 更新位置
+        // 我们的观众小人不在 remotePlayers 里。
+        // 所以我们需要手动更新标签位置，或者简单的创建一个临时的 DOM
+        // 为了方便，复用 updateNameTags 的逻辑太复杂，不如直接手动创建一个临时的
+        
+        // 还是用简单的方式：
+        // 实际上 networkManager.createNameTag 会把它加到 this.nameTags
+        // 但是 updateNameTags 只会更新 activeIds 里的。
+        // 我们可以把这个小人伪装成 remotePlayer 加入到 networkManager? 
+        // 不太好，会混淆逻辑。
+        
+        // 简单实现一个跟随的标签动画
+        const label = document.createElement('div');
+        label.className = 'player-name-tag';
+        label.innerText = name;
+        label.style.fontSize = '12px';
+        label.style.padding = '2px 6px';
+        document.body.appendChild(label);
+        
+        animations.push({
+            update: function() {
+                if (!mesh.parent) { // mesh removed
+                    if(label.parentNode) label.parentNode.removeChild(label);
+                    return true;
+                }
+                const tempV = mesh.position.clone();
+                tempV.y += 1.5;
+                tempV.project(camera);
+                const x = (tempV.x * .5 + .5) * window.innerWidth;
+                const y = (-(tempV.y * .5) + .5) * window.innerHeight;
+                label.style.left = `${x}px`;
+                label.style.top = `${y}px`;
+                label.style.display = (Math.abs(tempV.z) > 1) ? 'none' : 'block';
+                return false;
+            }
+        });
+    }
+}
+
+function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.innerText = msg;
+    toast.style.position = 'absolute';
+    toast.style.top = '20%';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.background = 'rgba(0,0,0,0.7)';
+    toast.style.color = '#fff';
+    toast.style.padding = '10px 20px';
+    toast.style.borderRadius = '20px';
+    toast.style.animation = 'floatUp 2s forwards';
+    toast.style.pointerEvents = 'none';
+    
+    // Add keyframes if not exists
+    if (!document.getElementById('toast-style')) {
+        const style = document.createElement('style');
+        style.id = 'toast-style';
+        style.innerHTML = `
+            @keyframes floatUp {
+                0% { opacity: 0; transform: translate(-50%, 20px); }
+                10% { opacity: 1; transform: translate(-50%, 0); }
+                80% { opacity: 1; transform: translate(-50%, -20px); }
+                100% { opacity: 0; transform: translate(-50%, -40px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        if(toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 2000);
+}
+
+function triggerFireworks() {
+    // 简单的全屏闪烁模拟
+    const flash = document.createElement('div');
+    flash.style.position = 'absolute';
+    flash.style.top = '0';
+    flash.style.left = '0';
+    flash.style.width = '100%';
+    flash.style.height = '100%';
+    flash.style.background = 'rgba(255, 215, 0, 0.3)';
+    flash.style.zIndex = '99';
+    flash.style.pointerEvents = 'none';
+    flash.style.transition = 'opacity 0.5s';
+    document.body.appendChild(flash);
+    
+    setTimeout(() => flash.style.opacity = '0', 100);
+    setTimeout(() => { if(flash.parentNode) flash.parentNode.removeChild(flash); }, 600);
+    
+    // 生成一堆粒子
+    for(let i=0; i<50; i++) {
+        spawnHeartEffect(true);
+    }
+}
+
+function spawnHeartEffect(random = false) {
+    // 简单的 DOM 粒子
+    const el = document.createElement('div');
+    el.innerText = Math.random() > 0.5 ? '❤️' : '✨';
+    el.style.position = 'absolute';
+    el.style.fontSize = (20 + Math.random() * 30) + 'px';
+    el.style.left = (random ? Math.random() * 100 : 50) + '%';
+    el.style.top = (random ? Math.random() * 100 : 50) + '%';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'all 1s ease-out';
+    el.style.zIndex = '100';
+    document.body.appendChild(el);
+    
+    requestAnimationFrame(() => {
+        el.style.transform = `translate(${Math.random()*200-100}px, ${-200-Math.random()*200}px) scale(0)`;
+        el.style.opacity = '0';
+    });
+    
+    setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 1000);
 }
 
 function startGame() {
@@ -875,6 +1159,11 @@ function gameOver() {
     audioManager.playFail();
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over').style.display = 'block';
+
+    // 提交本次挑战分数
+    if (networkManager && !isSpectator) {
+        networkManager.submitResult(score);
+    }
 }
 
 init();

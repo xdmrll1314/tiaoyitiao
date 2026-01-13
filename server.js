@@ -3,12 +3,74 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const path = require('path');
+const fs = require('fs');
 
 // 托管静态文件
 app.use(express.static(path.join(__dirname, '/')));
 
 // 玩家数据存储
 let players = {};
+// 历史最高分榜单
+let highScores = [];
+const HIGH_SCORES_FILE = path.join(__dirname, 'highscores.json');
+
+// 加载历史最高分
+function loadHighScores() {
+    try {
+        if (fs.existsSync(HIGH_SCORES_FILE)) {
+            const data = fs.readFileSync(HIGH_SCORES_FILE, 'utf8');
+            highScores = JSON.parse(data);
+        }
+    } catch (err) {
+        console.error('Failed to load high scores:', err);
+        highScores = [];
+    }
+}
+
+// 保存历史最高分
+function saveHighScores() {
+    try {
+        fs.writeFileSync(HIGH_SCORES_FILE, JSON.stringify(highScores, null, 2));
+    } catch (err) {
+        console.error('Failed to save high scores:', err);
+    }
+}
+
+// 初始化加载
+loadHighScores();
+
+// 更新最高分榜单
+function updateHighScores(nickname, score) {
+    // 检查是否能进入榜单 (前100名)
+    // 或者该用户是否刷新了自己的记录？
+    // 这里采用简单策略：记录单次最高分。如果同一个用户多次上榜，会占据多个位置吗？
+    // 通常榜单应该每个用户只占一个位置（最高分）。
+    
+    // 查找该用户是否已在榜单中
+    const existingEntryIndex = highScores.findIndex(entry => entry.nickname === nickname);
+    
+    if (existingEntryIndex !== -1) {
+        // 如果新分数更高，则更新
+        if (score > highScores[existingEntryIndex].score) {
+            highScores[existingEntryIndex].score = score;
+            highScores[existingEntryIndex].date = Date.now();
+        } else {
+            return false; // 没有刷新记录
+        }
+    } else {
+        // 新用户
+        highScores.push({ nickname, score, date: Date.now() });
+    }
+    
+    // 排序并截取前 50 名
+    highScores.sort((a, b) => b.score - a.score);
+    if (highScores.length > 50) {
+        highScores = highScores.slice(0, 50);
+    }
+    
+    saveHighScores();
+    return true;
+}
 
 // 工具函数：清理和验证昵称
 function sanitizeNickname(nickname) {
@@ -69,6 +131,8 @@ io.on('connection', (socket) => {
 
     // 发送当前所有在线玩家信息给新连接的客户端
     socket.emit('currentPlayers', players);
+    // 发送历史最高分榜单
+    socket.emit('highScoresUpdate', highScores);
 
     // 通知其他客户端有新玩家加入
     socket.broadcast.emit('newPlayer', players[socket.id]);
@@ -178,6 +242,33 @@ io.on('connection', (socket) => {
         players[socket.id].score = score;
         // 广播最新的排行榜数据
         io.emit('leaderboardUpdate', getLeaderboard());
+    });
+
+    // 监听游戏结束提交分数
+    socket.on('submitResult', (score) => {
+        if (!players[socket.id] || players[socket.id].isSpectator) return;
+        
+        // 简单验证
+        if (typeof score !== 'number' || score < 0) return;
+        
+        // 允许一定的误差，但主要以客户端提交为准（为了简单）。
+        // 严格来说应该以服务端记录的 players[socket.id].score 为准。
+        // 我们这里取两者较大值，或者直接信任服务端记录的当前分数？
+        // 有时候客户端结算可能比服务端更新快（或者慢），为了防止作弊，
+        // 我们应该检查 score 是否与 players[socket.id].score 接近。
+        // 但考虑到网络延迟，直接使用 players[socket.id].score 可能更安全。
+        // 不过，客户端可能在最后一步跳跃后立即 GameOver，而 movement/scoreUpdate 还没到。
+        // 这里为了简化，我们信任 socket.id 对应的当前服务端记录的分数作为基准，
+        // 如果客户端提交的 score 和服务端记录的差异不大，就记录。
+        // 或者更简单的：直接使用服务端记录的当前分数作为最终成绩。
+        
+        const finalScore = players[socket.id].score;
+        const nickname = players[socket.id].nickname;
+        
+        if (updateHighScores(nickname, finalScore)) {
+            // 如果榜单更新了，广播给所有人
+            io.emit('highScoresUpdate', highScores);
+        }
     });
 
     // 监听断开连接

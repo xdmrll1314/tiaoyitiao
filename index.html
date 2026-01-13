@@ -30,9 +30,15 @@
         <div id="power-bar"></div>
     </div>
     <div id="leaderboard">
-        <h3>在线排名</h3>
-        <ul id="leaderboard-list">
-            <!-- 动态生成 -->
+        <div class="lb-tabs">
+            <button class="lb-tab active" data-target="online">在线排名</button>
+            <button class="lb-tab" data-target="history">最高得分</button>
+        </div>
+        <ul id="leaderboard-list" class="lb-list active">
+            <!-- 动态生成在线排名 -->
+        </ul>
+        <ul id="highscore-list" class="lb-list" style="display:none;">
+            <!-- 动态生成历史排名 -->
         </ul>
     </div>
     <div id="game-over">

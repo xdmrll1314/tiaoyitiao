@@ -86,6 +86,45 @@ class NetworkManager {
         this.socket.on('leaderboardUpdate', (leaderboard) => {
             this.updateLeaderboardUI(leaderboard);
         });
+
+        this.socket.on('highScoresUpdate', (scores) => {
+            this.updateHighScoresUI(scores);
+        });
+
+        // 初始化 Tab 事件
+        if (!this.tabsInitialized) {
+            this.initLeaderboardTabs();
+            this.tabsInitialized = true;
+        }
+    }
+
+    initLeaderboardTabs() {
+        const tabs = document.querySelectorAll('.lb-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.stopPropagation(); // 防止触发 canvas 点击
+                // 切换 Tab 样式
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // 切换列表显示
+                const target = tab.dataset.target;
+                const onlineList = document.getElementById('leaderboard-list');
+                const historyList = document.getElementById('highscore-list');
+                
+                if (target === 'online') {
+                    onlineList.style.display = 'block';
+                    historyList.style.display = 'none';
+                    onlineList.classList.add('active');
+                    historyList.classList.remove('active');
+                } else {
+                    onlineList.style.display = 'none';
+                    historyList.style.display = 'block';
+                    onlineList.classList.remove('active');
+                    historyList.classList.add('active');
+                }
+            });
+        });
     }
 
     emitMovement(position, rotationY) {
@@ -106,6 +145,12 @@ class NetworkManager {
     emitScore(score) {
         if (this.socket) {
             this.socket.emit('scoreUpdate', score);
+        }
+    }
+
+    submitResult(score) {
+        if (this.socket) {
+            this.socket.emit('submitResult', score);
         }
     }
 
@@ -320,9 +365,22 @@ class NetworkManager {
             const isMe = p.id === this.socket.id ? ' (我)' : '';
             li.innerHTML = `<span>#${index + 1} ${displayName}${isMe}</span> <span>${p.score}</span>`;
             
-            // 高亮当前观战目标 (需要外部样式支持，或者在这里判断)
-            // 由于 spectatorTargetId 在 game.js，这里解耦比较好，只负责渲染
-            
+            list.appendChild(li);
+        });
+
+        if (this.leaderboardUpdateCallback) {
+            this.leaderboardUpdateCallback();
+        }
+    }
+
+    updateHighScoresUI(scores) {
+        const list = document.getElementById('highscore-list');
+        list.innerHTML = '';
+        scores.forEach((p, index) => {
+            const li = document.createElement('li');
+            // const date = new Date(p.date);
+            // const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
+            li.innerHTML = `<span>#${index + 1} ${p.nickname}</span> <span>${p.score}</span>`;
             list.appendChild(li);
         });
     }
