@@ -93,6 +93,17 @@ function init() {
     networkManager = new NetworkManager(scene);
     networkManager.setStatusHandler(updateConnectionStatusUI);
     networkManager.setScoreGetter(() => score);
+    networkManager.setLeaderboardUpdateCallback(() => {
+        if (isSpectator && spectatorTargetId) {
+             document.querySelectorAll('#leaderboard-list li').forEach(el => {
+                if (el.dataset.id === spectatorTargetId) {
+                    el.style.background = 'rgba(255, 255, 255, 0.2)';
+                } else {
+                    el.style.background = '';
+                }
+            });
+        }
+    });
     
     // 缓存 DOM
     powerBar = document.getElementById('power-bar');
@@ -115,10 +126,7 @@ function init() {
         if (!isSpectator) return;
         const li = e.target.closest('li');
         if (li && li.dataset.id) {
-            spectatorTargetId = li.dataset.id;
-            // 简单的视觉反馈
-            document.querySelectorAll('#leaderboard-list li').forEach(el => el.style.background = '');
-            li.style.background = 'rgba(255, 255, 255, 0.2)';
+            setSpectatorTarget(li.dataset.id);
         }
     });
 
@@ -203,8 +211,13 @@ function startSpectatorMode() {
     if (!statusDiv) {
         statusDiv = document.createElement('div');
         statusDiv.id = 'spectator-status';
-        statusDiv.style.fontSize = '14px';
-        statusDiv.style.color = '#aaa';
+        statusDiv.style.fontSize = '16px';
+        statusDiv.style.color = '#555';
+        statusDiv.style.marginTop = '15px';
+        statusDiv.style.background = 'rgba(255, 255, 255, 0.6)';
+        statusDiv.style.padding = '5px 10px';
+        statusDiv.style.borderRadius = '15px';
+        statusDiv.style.display = 'inline-block';
         scoreContainer.appendChild(statusDiv);
     }
     statusDiv.innerText = '观战中';
@@ -238,6 +251,45 @@ function startSpectatorMode() {
     }
 
     resetGame();
+}
+
+function setSpectatorTarget(id) {
+    if (spectatorTargetId === id) return;
+
+    // 恢复旧目标透明度
+    if (spectatorTargetId && networkManager) {
+        networkManager.setPlayerOpacity(spectatorTargetId, 0.7);
+    }
+
+    spectatorTargetId = id;
+
+    // 设置新目标不透明
+    if (spectatorTargetId && networkManager) {
+        networkManager.setPlayerOpacity(spectatorTargetId, 1.0);
+    }
+
+    updateSpectatorInfoUI();
+    
+    // 排行榜高亮更新
+    document.querySelectorAll('#leaderboard-list li').forEach(el => {
+        if (el.dataset.id === spectatorTargetId) {
+            el.style.background = 'rgba(255, 255, 255, 0.2)';
+        } else {
+            el.style.background = '';
+        }
+    });
+}
+
+function updateSpectatorInfoUI() {
+    let statusDiv = document.getElementById('spectator-status');
+    if (!statusDiv) return;
+    
+    let targetName = '无人';
+    if (spectatorTargetId && networkManager) {
+        targetName = networkManager.getRemotePlayerNickname(spectatorTargetId) || 'Unknown';
+    }
+    
+    statusDiv.innerHTML = `正在观战: <span style="color: #409EFF; font-weight: bold;">${targetName}</span>`;
 }
 
 function showGuideIfNeeded() {
@@ -636,11 +688,18 @@ function updateCamera() {
         if (spectatorTargetId && networkManager.remotePlayers[spectatorTargetId]) {
             targetPos = networkManager.remotePlayers[spectatorTargetId].position;
         } else {
-            // 自动寻找目标
+            // 目标丢失或未设置，自动寻找新目标
             const ids = Object.keys(networkManager.remotePlayers);
             if (ids.length > 0) {
-                spectatorTargetId = ids[0];
-                targetPos = networkManager.remotePlayers[spectatorTargetId].position;
+                // 优先选择第一个（通常是分数最高的，因为排行榜顺序可能和keys顺序不一致，但暂时随机选一个）
+                setSpectatorTarget(ids[0]);
+                targetPos = networkManager.remotePlayers[ids[0]].position;
+            } else {
+                 // 没有任何玩家，重置目标
+                 if (spectatorTargetId) {
+                     spectatorTargetId = null;
+                     updateSpectatorInfoUI();
+                 }
             }
         }
         targetX = targetPos.x + 20;

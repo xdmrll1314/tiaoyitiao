@@ -9,6 +9,7 @@ class NetworkManager {
         this.statusHandler = null;
         this.scoreGetter = null;
         this.nickname = '';
+        this.leaderboardUpdateCallback = null;
     }
 
     connect(nickname) {
@@ -119,17 +120,10 @@ class NetworkManager {
         
         mesh.userData.targetPos = { x: data.x, y: data.y, z: data.z };
         mesh.userData.targetRot = data.rotationY;
+        mesh.userData.nickname = data.nickname;
 
-        // 让远程玩家稍微半透明一点，区分"我"
-        mesh.traverse(child => {
-            if (child.isMesh && child.material) {
-                if (!Array.isArray(child.material)) {
-                    child.material = child.material.clone();
-                    child.material.transparent = true;
-                    child.material.opacity = 0.7;
-                }
-            }
-        });
+        // 默认半透明
+        this.setMeshOpacity(mesh, 0.7);
 
         this.scene.add(mesh);
         this.remotePlayers[id] = mesh;
@@ -139,6 +133,39 @@ class NetworkManager {
             this.createNameTag(id, data.nickname, false);
         }
     }
+
+    setMeshOpacity(mesh, opacity) {
+        mesh.traverse(child => {
+            if (child.isMesh && child.material) {
+                if (!Array.isArray(child.material)) {
+                    // 确保 material 是唯一的，不影响其他实例
+                    if (!child.userData.hasClonedMaterial) {
+                         child.material = child.material.clone();
+                         child.userData.hasClonedMaterial = true;
+                    }
+                    child.material.transparent = opacity < 1;
+                    child.material.opacity = opacity;
+                }
+            }
+        });
+    }
+
+    setPlayerOpacity(id, opacity) {
+        if (this.remotePlayers[id]) {
+            this.setMeshOpacity(this.remotePlayers[id], opacity);
+        }
+    }
+
+    getRemotePlayerNickname(id) {
+        // 从 nameTag 获取或者存储在 userData 中
+        // 目前 createRemotePlayer 没有存 nickname 到 mesh.userData，只用来创建 nameTag
+        // 我们可以从 nameTags 中反查，或者最好在 createRemotePlayer 时存一下
+        if (this.remotePlayers[id] && this.remotePlayers[id].userData.nickname) {
+            return this.remotePlayers[id].userData.nickname;
+        }
+        return 'Unknown';
+    }
+
 
     removeRemotePlayer(id) {
         if (this.remotePlayers[id]) {
@@ -316,6 +343,10 @@ class NetworkManager {
 
     setScoreGetter(fn) {
         this.scoreGetter = fn;
+    }
+
+    setLeaderboardUpdateCallback(cb) {
+        this.leaderboardUpdateCallback = cb;
     }
 
     clearRemoteState() {
