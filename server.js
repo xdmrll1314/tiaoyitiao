@@ -73,9 +73,20 @@ io.on('connection', (socket) => {
     // 通知其他客户端有新玩家加入
     socket.broadcast.emit('newPlayer', players[socket.id]);
 
+    // 监听进入观战模式
+    socket.on('joinSpectator', () => {
+        if (players[socket.id]) {
+            players[socket.id].isSpectator = true;
+            players[socket.id].nickname = 'Spectator'; // 默认观战昵称
+            // 广播玩家信息更新 (客户端收到后应移除该玩家实体)
+            io.emit('playerInfoUpdate', players[socket.id]);
+            io.emit('leaderboardUpdate', getLeaderboard());
+        }
+    });
+
     // 监听玩家移动/状态更新
     socket.on('playerMovement', (movementData) => {
-        if (!players[socket.id]) return;
+        if (!players[socket.id] || players[socket.id].isSpectator) return;
         
         // 频率限制检查
         const now = Date.now();
@@ -115,7 +126,7 @@ io.on('connection', (socket) => {
 
     // 监听分数更新
     socket.on('scoreUpdate', (score) => {
-        if (!players[socket.id]) return;
+        if (!players[socket.id] || players[socket.id].isSpectator) return;
         
         // 频率限制检查
         const now = Date.now();
@@ -183,6 +194,7 @@ io.on('connection', (socket) => {
 // 获取排行榜数据 (按分数降序)
 function getLeaderboard() {
     return Object.values(players)
+        .filter(p => !p.isSpectator)
         .sort((a, b) => b.score - a.score)
         .slice(0, 10); // 只取前10名
 }

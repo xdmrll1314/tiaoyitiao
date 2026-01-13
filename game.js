@@ -27,6 +27,8 @@ let cameraShake = { x: 0, y: 0, z: 0 }; // 相机震动
 let cameraZoom = 1; // 相机缩放
 
 // 多人游戏变量
+let isSpectator = false;
+let spectatorTargetId = null; // 观战目标 ID
 let networkManager; // NetworkManager 实例
 
 function init() {
@@ -106,6 +108,20 @@ function init() {
 
     // resetGame();
 
+    document.getElementById('spectate-btn').addEventListener('click', startSpectatorMode);
+
+    // 观战模式下点击排行榜切换视角
+    document.getElementById('leaderboard-list').addEventListener('click', (e) => {
+        if (!isSpectator) return;
+        const li = e.target.closest('li');
+        if (li && li.dataset.id) {
+            spectatorTargetId = li.dataset.id;
+            // 简单的视觉反馈
+            document.querySelectorAll('#leaderboard-list li').forEach(el => el.style.background = '');
+            li.style.background = 'rgba(255, 255, 255, 0.2)';
+        }
+    });
+
     // 事件
     window.addEventListener('resize', onWindowResize, false);
     window.addEventListener('keydown', (e) => {
@@ -174,6 +190,53 @@ function init() {
 
 function startGame() {
     networkManager.connect(nickname);
+    resetGame();
+}
+
+function startSpectatorMode() {
+    isSpectator = true;
+    document.getElementById('login-modal').style.display = 'none';
+    
+    // 显示观战状态
+    const scoreContainer = document.getElementById('score-container');
+    let statusDiv = document.getElementById('spectator-status');
+    if (!statusDiv) {
+        statusDiv = document.createElement('div');
+        statusDiv.id = 'spectator-status';
+        statusDiv.style.fontSize = '14px';
+        statusDiv.style.color = '#aaa';
+        scoreContainer.appendChild(statusDiv);
+    }
+    statusDiv.innerText = '观战中';
+
+    // 连接服务器
+    networkManager.connect('Spectator');
+    
+    // 监听连接成功事件，发送 joinSpectator
+    // 注意：networkManager.connect 内部也会监听 connect，这里我们追加一个监听器
+    // 由于 socket 实例是在 connect 中创建的，我们需要确保在 socket 创建后绑定
+    // 但 connect 是同步创建 socket (io())，所以可以直接访问 networkManager.socket
+    if (networkManager.socket) {
+        networkManager.socket.on('connect', () => {
+            networkManager.socket.emit('joinSpectator');
+        });
+    } else {
+        // 如果 connect 还没创建 socket (不太可能，除非 socket.io 加载失败)，稍微延迟一下
+        // 或者因为 connect 方法内部就是同步 io()，所以应该没问题。
+        // 但为了保险，我们可以修改 connect 方法返回 socket，或者假设它已经设置了。
+        // 实际上 networkManager.connect 里的 socket 是立马赋值的。
+        // 可是为了更稳健，我们可以利用 networkManager 已经有的机制。
+        // 简单起见，利用 setTimeout 0
+        setTimeout(() => {
+             if(networkManager.socket) {
+                 networkManager.socket.emit('joinSpectator'); // 如果已经连接了
+                 networkManager.socket.on('connect', () => {
+                     networkManager.socket.emit('joinSpectator');
+                 });
+             }
+        }, 100);
+    }
+
     resetGame();
 }
 
@@ -285,8 +348,15 @@ function resetGame() {
 
     // 初始方块
     createBlock(0, 0, 0, false);
-    createPlayer();
-    spawnNextBlock(false);
+    
+    if (!isSpectator) {
+        createPlayer();
+        spawnNextBlock(false);
+    } else {
+        // 观战模式下，初始不需要创建本地玩家，也不需要生成下一个方块（由服务器同步或其他玩家触发）
+        // 但为了看到场景，我们可以先生成初始方块
+        // 实际观战中，方块应该由服务器同步，目前简化版先保留基本场景
+    }
     
     // 重置相机
     const aspect = window.innerWidth / window.innerHeight;
@@ -557,9 +627,33 @@ function animate() {
 }
 
 function updateCamera() {
-    if (!player) return;
-    const targetX = player.position.x + 20;
-    const targetZ = player.position.z + 20;
+    let targetX, targetZ;
+    let lookAtX, lookAtZ;
+
+    if (isSpectator) {
+        let targetPos = { x: 0, y: 0, z: 0 };
+        // 尝试跟随目标
+        if (spectatorTargetId && networkManager.remotePlayers[spectatorTargetId]) {
+            targetPos = networkManager.remotePlayers[spectatorTargetId].position;
+        } else {
+            // 自动寻找目标
+            const ids = Object.keys(networkManager.remotePlayers);
+            if (ids.length > 0) {
+                spectatorTargetId = ids[0];
+                targetPos = networkManager.remotePlayers[spectatorTargetId].position;
+            }
+        }
+        targetX = targetPos.x + 20;
+        targetZ = targetPos.z + 20;
+        lookAtX = targetPos.x;
+        lookAtZ = targetPos.z;
+    } else {
+        if (!player) return;
+        targetX = player.position.x + 20;
+        targetZ = player.position.z + 20;
+        lookAtX = player.position.x;
+        lookAtZ = player.position.z;
+    }
     
     // 震动衰减
     cameraShake.x *= 0.85;
@@ -582,7 +676,7 @@ function updateCamera() {
     const finalZ = camera.position.z + cameraShake.z;
 
     camera.position.set(finalX, finalY, finalZ);
-    camera.lookAt(player.position.x, 0, player.position.z);
+    camera.lookAt(lookAtX, 0, lookAtZ);
 
     // 恢复原来的 position 供下一次计算 (去除震动偏移，否则震动会累积漂移)
     camera.position.x -= cameraShake.x;
@@ -591,11 +685,18 @@ function updateCamera() {
 
     if (dirLight) {
         dirLight.position.set(
-            player.position.x + 10,
-            player.position.y + 30,
-            player.position.z + 20
+            lookAtX + 10,
+            20 + 30, // player.position.y is usually around 1, simplifying
+            lookAtZ + 20
         );
-        dirLight.target = player; 
+        // dirLight.target needs an object. We can create a dummy object or just update target's position if it was a Object3D.
+        // But dirLight.target is usually an Object3D. 
+        // Let's just update the target's position directly if we can access it.
+        // Or better, set dirLight.target.position.set(lookAtX, 0, lookAtZ); 
+        // Note: dirLight.target must be in the scene for updateMatrixWorld to work automatically?
+        // Default target is (0,0,0).
+        dirLight.target.position.set(lookAtX, 0, lookAtZ);
+        dirLight.target.updateMatrixWorld();
     }
 }
 

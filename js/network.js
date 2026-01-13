@@ -60,6 +60,11 @@ class NetworkManager {
         });
         
         this.socket.on('playerInfoUpdate', (playerInfo) => {
+            if (playerInfo.isSpectator) {
+                // 如果玩家转为观战者，移除其实体
+                this.removeRemotePlayer(playerInfo.id);
+                return;
+            }
             // 更新昵称显示
             this.createNameTag(playerInfo.id, playerInfo.nickname, playerInfo.id === this.socket.id);
         });
@@ -104,6 +109,9 @@ class NetworkManager {
     }
 
     createRemotePlayer(id, data) {
+        // 观战者不创建实体
+        if (data.isSpectator) return;
+
         // 远程玩家也是哪吒，但可能半透明或者颜色不同
         const mesh = createCharacterMesh(false); 
         mesh.position.set(data.x, data.y, data.z);
@@ -278,9 +286,16 @@ class NetworkManager {
         list.innerHTML = '';
         leaderboard.forEach((p, index) => {
             const li = document.createElement('li');
+            li.dataset.id = p.id; // 绑定 ID 方便点击
+            li.style.cursor = 'pointer';
+            
             const displayName = p.nickname || p.id.substring(0, 4);
             const isMe = p.id === this.socket.id ? ' (我)' : '';
             li.innerHTML = `<span>#${index + 1} ${displayName}${isMe}</span> <span>${p.score}</span>`;
+            
+            // 高亮当前观战目标 (需要外部样式支持，或者在这里判断)
+            // 由于 spectatorTargetId 在 game.js，这里解耦比较好，只负责渲染
+            
             list.appendChild(li);
         });
     }
