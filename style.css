@@ -38,6 +38,47 @@ body {
     letter-spacing: 2px;
 }
 
+#leaderboard {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    padding: 15px;
+    border-radius: 15px;
+    width: 200px;
+    z-index: 15;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+#leaderboard h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #333;
+    text-align: center;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    padding-bottom: 5px;
+}
+
+#leaderboard-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#leaderboard-list li {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+#leaderboard-list li span:first-child {
+    font-weight: bold;
+    color: #333;
+}
+
 #game-over {
     position: absolute;
     top: 50%;
@@ -127,4 +168,79 @@ body {
     0% { opacity: 0.5; }
     50% { opacity: 1; }
     100% { opacity: 0.5; }
+}
+
+/* 登录弹窗 */
+#login-modal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-box {
+    text-align: center;
+    width: 80%;
+    max-width: 320px;
+}
+
+.login-box h2 {
+    font-size: 28px;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+#nickname-input {
+    width: 100%;
+    padding: 15px;
+    font-size: 18px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    outline: none;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+#nickname-input:focus {
+    border-color: #667eea;
+}
+
+#start-game-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 0;
+    width: 100%;
+    font-size: 18px;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 10px 20px rgba(118, 75, 162, 0.3);
+}
+
+/* 玩家名牌 */
+.player-name-tag {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    transform: translate(-50%, -100%);
+    white-space: nowrap;
+    z-index: 5;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.player-name-tag.me {
+    background: rgba(102, 126, 234, 0.8);
+    font-weight: bold;
 }
