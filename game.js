@@ -179,9 +179,108 @@ const ResourceManager = {
     }
 };
 
+// 波纹特效
+class RippleSystem {
+    constructor(scene) {
+        this.scene = scene;
+        this.ripples = [];
+        this.geometry = new THREE.RingGeometry(0.5, 0.7, 32);
+        this.geometry.rotateX(-Math.PI / 2); // 预先旋转
+        this.material = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, 
+            transparent: true, 
+            opacity: 0.5, 
+            side: THREE.DoubleSide 
+        });
+    }
+
+    spawn(position, color) {
+        const mesh = new THREE.Mesh(this.geometry, this.material.clone());
+        if (color) mesh.material.color.setHex(color);
+        // 确保波纹在方块上方一点点
+        mesh.position.copy(position);
+        mesh.position.y = 1.05; 
+        
+        this.scene.add(mesh);
+        this.ripples.push({ mesh, age: 0 });
+    }
+
+    update() {
+        for (let i = this.ripples.length - 1; i >= 0; i--) {
+            const r = this.ripples[i];
+            r.age += 0.02;
+            
+            // 扩散和淡出
+            const scale = 1 + r.age * 5;
+            r.mesh.scale.setScalar(scale);
+            r.mesh.material.opacity = 0.6 * (1 - r.age);
+            
+            if (r.age >= 1) {
+                this.scene.remove(r.mesh);
+                if (r.mesh.material) r.mesh.material.dispose();
+                this.ripples.splice(i, 1);
+            }
+        }
+    }
+}
+
+// 漂浮云朵
+class CloudSystem {
+    constructor(scene) {
+        this.scene = scene;
+        this.clouds = [];
+        this.geometry = new THREE.BoxGeometry(1, 1, 1);
+        this.material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+        
+        for (let i = 0; i < 15; i++) {
+            this.spawn();
+        }
+    }
+
+    spawn() {
+        const group = new THREE.Group();
+        const segments = 3 + Math.floor(Math.random() * 3);
+        for(let i=0; i<segments; i++) {
+            const mesh = new THREE.Mesh(this.geometry, this.material);
+            mesh.position.set(
+                (Math.random() - 0.5) * 3,
+                (Math.random() - 0.5) * 1,
+                (Math.random() - 0.5) * 3
+            );
+            mesh.scale.set(
+                1 + Math.random() * 2,
+                0.5 + Math.random(),
+                1 + Math.random() * 2
+            );
+            group.add(mesh);
+        }
+        
+        // 随机分布在场景周围
+        group.position.set(
+            (Math.random() - 0.5) * 100,
+            -10 + Math.random() * 10, 
+            (Math.random() - 0.5) * 100
+        );
+        
+        this.scene.add(group);
+        this.clouds.push({ mesh: group, speed: 0.02 + Math.random() * 0.03 });
+    }
+
+    update() {
+        this.clouds.forEach(c => {
+            c.mesh.position.x += c.speed;
+            if (c.mesh.position.x > 60) {
+                c.mesh.position.x = -60;
+                c.mesh.position.z = (Math.random() - 0.5) * 100;
+            }
+        });
+    }
+}
+
 // 全局变量
 let scene, camera, renderer, dirLight;
 let player, innerPlayer, audioManager, particleSystem;
+let cloudSystem, rippleSystem; // 新增特效系统
 let blocks = [];
 let score = 0;
 let combo = 0;
@@ -195,6 +294,9 @@ let animations = [];
 let nickname = 'Unknown';
 let nameTags = {}; // { socketId: htmlElement }
 let powerBar, powerBarContainer; // 缓存 DOM 元素
+
+let cameraShake = { x: 0, y: 0, z: 0 }; // 相机震动
+let cameraZoom = 1; // 相机缩放
 
 // 多人游戏变量
 let socket;
@@ -242,6 +344,8 @@ function init() {
     // 辅助系统
     audioManager = new AudioManager();
     particleSystem = new ParticleSystem(scene);
+    cloudSystem = new CloudSystem(scene);
+    rippleSystem = new RippleSystem(scene);
     ResourceManager.init();
     
     // 缓存 DOM
@@ -910,6 +1014,8 @@ function animate() {
     });
     
     particleSystem.update();
+    if (cloudSystem) cloudSystem.update();
+    if (rippleSystem) rippleSystem.update();
     renderer.render(scene, camera);
 }
 
@@ -917,9 +1023,34 @@ function updateCamera() {
     if (!player) return;
     const targetX = player.position.x + 20;
     const targetZ = player.position.z + 20;
+    
+    // 震动衰减
+    cameraShake.x *= 0.85;
+    cameraShake.y *= 0.85;
+    cameraShake.z *= 0.85;
+
+    // 动态缩放 (蓄力时拉远)
+    const targetZoom = isCharging ? 0.7 : 1.0;
+    cameraZoom += (targetZoom - cameraZoom) * 0.05;
+    camera.zoom = cameraZoom;
+    camera.updateProjectionMatrix();
+
+    // 平滑跟随
     camera.position.x += (targetX - camera.position.x) * 0.05;
     camera.position.z += (targetZ - camera.position.z) * 0.05;
+    
+    // 叠加震动偏移
+    const finalX = camera.position.x + cameraShake.x;
+    const finalY = 20 + cameraShake.y;
+    const finalZ = camera.position.z + cameraShake.z;
+
+    camera.position.set(finalX, finalY, finalZ);
     camera.lookAt(player.position.x, 0, player.position.z);
+
+    // 恢复原来的 position 供下一次计算 (去除震动偏移，否则震动会累积漂移)
+    camera.position.x -= cameraShake.x;
+    camera.position.y = 20;
+    camera.position.z -= cameraShake.z;
 
     if (dirLight) {
         dirLight.position.set(
@@ -956,6 +1087,15 @@ if (landedBlock) {
                 Math.pow(player.position.z - landedBlock.position.z, 2)
             );
             
+            // 落地震动 (轻微)
+            cameraShake.y = -0.3;
+
+            // 波纹特效
+            if (rippleSystem) {
+                const rippleColor = dist < 0.5 ? 0xFFD700 : 0xFFFFFF;
+                rippleSystem.spawn(landedBlock.position, rippleColor);
+            }
+            
             let addScore = 1;
             let isPerfect = false;
             
@@ -963,6 +1103,11 @@ if (landedBlock) {
                 combo++;
                 addScore = Math.pow(2, combo); 
                 isPerfect = true;
+                
+                // 完美落地强力震动
+                cameraShake.x = (Math.random() - 0.5) * 0.5;
+                cameraShake.z = (Math.random() - 0.5) * 0.5;
+                cameraShake.y = -0.8;
             } else {
                 combo = 0;
                 addScore = 1;
