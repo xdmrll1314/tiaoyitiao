@@ -194,6 +194,7 @@ let targetRotationY = 0;
 let animations = []; 
 let nickname = 'Unknown';
 let nameTags = {}; // { socketId: htmlElement }
+let powerBar, powerBarContainer; // 缓存 DOM 元素
 
 // 多人游戏变量
 let socket;
@@ -213,6 +214,7 @@ function init() {
     // 渲染器
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); 
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 解决模糊问题，限制最大2倍提升性能
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
@@ -241,6 +243,10 @@ function init() {
     audioManager = new AudioManager();
     particleSystem = new ParticleSystem(scene);
     ResourceManager.init();
+    
+    // 缓存 DOM
+    powerBar = document.getElementById('power-bar');
+    powerBarContainer = document.getElementById('power-bar-container');
 
     // 等待用户输入昵称后再连接 Socket
     // socket = io();
@@ -778,11 +784,33 @@ function animate() {
     }
     
     if (isCharging && isGameRunning) {
+        // 更新蓄力条
+        const duration = Date.now() - chargeStartTime;
+        const maxTime = 1500; 
+        const percentage = Math.min((duration / maxTime) * 100, 100);
+        
+        if (powerBar && powerBarContainer) {
+            powerBarContainer.style.display = 'block';
+            powerBar.style.width = percentage + '%';
+            
+            // 变色提示
+            if (percentage < 50) {
+                powerBar.style.background = '#67C23A'; // Green
+            } else if (percentage < 80) {
+                powerBar.style.background = '#E6A23C'; // Yellow
+            } else {
+                powerBar.style.background = '#F56C6C'; // Red
+            }
+        }
+
         if (innerPlayer.scale.y > config.maxCompression) {
             innerPlayer.scale.y -= 0.015;
             innerPlayer.scale.x += 0.01;
             innerPlayer.scale.z += 0.01;
         }
+    } else {
+        // 隐藏蓄力条
+        if (powerBarContainer) powerBarContainer.style.display = 'none';
     }
     
     if (isGameRunning) {

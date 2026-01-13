@@ -1,6 +1,8 @@
-body {
+html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: linear-gradient(to bottom, #f5f7fa 0%, #c3cfe2 100%);
@@ -243,4 +245,59 @@ body {
 .player-name-tag.me {
     background: rgba(102, 126, 234, 0.8);
     font-weight: bold;
+}
+
+/* 蓄力条 */
+#power-bar-container {
+    position: absolute;
+    top: 50%; /* 移动到角色附近或屏幕中心方便观察，或者放在手指按压位置附近 */
+    left: 50%;
+    transform: translate(-50%, -150px); /* 默认放在上方一点 */
+    width: 100px;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    overflow: hidden;
+    display: none; /* 默认隐藏，蓄力时显示 */
+    pointer-events: none;
+    z-index: 20;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+#power-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(to right, #67C23A, #E6A23C, #F56C6C);
+    border-radius: 5px;
+    transition: width 0.1s linear;
+}
+
+/* 移动端适配 */
+@media (max-width: 600px) {
+    #leaderboard {
+        width: 140px;
+        padding: 10px;
+        top: 10px;
+        right: 10px;
+        transform-origin: top right;
+        transform: scale(0.8); /* 整体缩小 */
+    }
+
+    #leaderboard h3 {
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+
+    #leaderboard-list li {
+        font-size: 12px;
+        margin-bottom: 3px;
+    }
+
+    #score {
+        font-size: 60px;
+    }
+    
+    #touch-indicator {
+        bottom: 15%; /* 稍微上移避免被某些手机手势条遮挡 */
+    }
 }
