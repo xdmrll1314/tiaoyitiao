@@ -192,6 +192,8 @@ let velocity = { x: 0, y: 0, z: 0 };
 let rotateSpeed = 0; 
 let targetRotationY = 0; 
 let animations = []; 
+let nickname = 'Unknown';
+let nameTags = {}; // { socketId: htmlElement }
 
 // 多人游戏变量
 let socket;
@@ -240,11 +242,11 @@ function init() {
     particleSystem = new ParticleSystem(scene);
     ResourceManager.init();
 
-    // Socket 连接
-    socket = io();
-    setupSocketHandlers();
+    // 等待用户输入昵称后再连接 Socket
+    // socket = io();
+    // setupSocketHandlers();
 
-    resetGame();
+    // resetGame();
 
     // 事件
     window.addEventListener('resize', onWindowResize, false);
@@ -256,10 +258,20 @@ function init() {
     });
     
     const inputStart = (e) => {
+        // 如果点击的是 UI 元素 (按钮等)，则不触发游戏逻辑，也不阻止默认行为
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'INPUT') {
+            return;
+        }
+
         if(e.type === 'touchstart') e.preventDefault();
         onMouseDown(e);
     };
     const inputEnd = (e) => {
+        // 同样放行按钮点击
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'INPUT') {
+            return;
+        }
+
         if(e.type === 'touchend') e.preventDefault();
         onMouseUp(e);
     };
@@ -274,7 +286,109 @@ function init() {
         resetGame();
     });
 
+    // 登录逻辑
+    document.getElementById('start-game-btn').addEventListener('click', () => {
+        const input = document.getElementById('nickname-input');
+        const val = input.value.trim();
+        if (val) {
+            nickname = val;
+            document.getElementById('login-modal').style.display = 'none';
+            startGame();
+        } else {
+            alert('请输入昵称');
+        }
+    });
+
     animate();
+}
+
+function startGame() {
+    socket = io();
+    setupSocketHandlers();
+    
+    // 连接成功后发送昵称
+    socket.on('connect', () => {
+        socket.emit('setNickname', nickname);
+    });
+
+    resetGame();
+}
+
+function createNameTag(id, name, isMe) {
+    // 尝试通过 ID 查找现有的 DOM 元素，防止 nameTags 引用丢失导致的重复
+    let tag = nameTags[id];
+    if (!tag) {
+        tag = document.querySelector(`.player-name-tag[data-id="${id}"]`);
+    }
+
+    // 移除旧的
+    if (tag && tag.parentNode) {
+        tag.parentNode.removeChild(tag);
+    }
+
+    tag = document.createElement('div');
+    tag.className = 'player-name-tag' + (isMe ? ' me' : '');
+    tag.innerText = name;
+    tag.dataset.id = id; // 绑定 ID 到 DOM
+    document.body.appendChild(tag);
+    nameTags[id] = tag;
+    return tag;
+}
+
+function updateNameTags() {
+    const activeIds = new Set();
+
+    // 更新我的名牌
+    if (player && socket) {
+        activeIds.add(socket.id);
+        if (nameTags[socket.id]) {
+            updateTagPosition(player.position, nameTags[socket.id]);
+        }
+    }
+
+    // 更新远程玩家名牌
+    Object.keys(remotePlayers).forEach(id => {
+        activeIds.add(id);
+        if (remotePlayers[id] && nameTags[id]) {
+            updateTagPosition(remotePlayers[id].position, nameTags[id]);
+        }
+    });
+
+    // 清理僵尸标签
+    // 1. 清理 nameTags 对象中过期的
+    Object.keys(nameTags).forEach(id => {
+        if (!activeIds.has(id)) {
+            if (nameTags[id].parentNode) nameTags[id].parentNode.removeChild(nameTags[id]);
+            delete nameTags[id];
+        }
+    });
+
+    // 2. 扫描 DOM 清理漏网之鱼 (防止页面上残留无法交互的标签)
+    document.querySelectorAll('.player-name-tag').forEach(tag => {
+        const id = tag.dataset.id;
+        if (!id || !activeIds.has(id)) {
+            if (tag.parentNode) tag.parentNode.removeChild(tag);
+        }
+    });
+}
+
+function updateTagPosition(pos, tag) {
+    // 头部上方
+    const tempV = new THREE.Vector3(pos.x, pos.y + 2.5, pos.z);
+    tempV.project(camera);
+
+    const x = (tempV.x * .5 + .5) * window.innerWidth;
+    const y = (-(tempV.y * .5) + .5) * window.innerHeight;
+
+    tag.style.left = `${x}px`;
+    tag.style.top = `${y}px`;
+    
+    // 如果在视野外隐藏
+    if (Math.abs(tempV.z) > 1) {
+        tag.style.display = 'none';
+    } else {
+        tag.style.display = 'block';
+    }
 }
 
 function setupSocketHandlers() {
@@ -286,7 +400,13 @@ function setupSocketHandlers() {
     });
 
     socket.on('newPlayer', (playerInfo) => {
+        if (playerInfo.id === socket.id) return;
         createRemotePlayer(playerInfo.id, playerInfo);
+    });
+    
+    socket.on('playerInfoUpdate', (playerInfo) => {
+        // 更新昵称显示
+        createNameTag(playerInfo.id, playerInfo.nickname, playerInfo.id === socket.id);
     });
 
     socket.on('playerMoved', (playerInfo) => {
@@ -313,6 +433,11 @@ function setupSocketHandlers() {
             });
             delete remotePlayers[id];
         }
+        // 清理名牌
+        if (nameTags[id]) {
+            if (nameTags[id].parentNode) nameTags[id].parentNode.removeChild(nameTags[id]);
+            delete nameTags[id];
+        }
     });
 
     socket.on('leaderboardUpdate', (leaderboard) => {
@@ -325,10 +450,10 @@ function updateLeaderboardUI(leaderboard) {
     list.innerHTML = '';
     leaderboard.forEach((p, index) => {
         const li = document.createElement('li');
-        // 简单显示：排名. ID(后4位): 分数
-        const shortId = p.id.substring(0, 4);
+        // 简单显示：排名. 昵称: 分数
+        const displayName = p.nickname || p.id.substring(0, 4);
         const isMe = p.id === socket.id ? ' (我)' : '';
-        li.innerHTML = `<span>#${index + 1} ${shortId}${isMe}</span> <span>${p.score}</span>`;
+        li.innerHTML = `<span>#${index + 1} ${displayName}${isMe}</span> <span>${p.score}</span>`;
         list.appendChild(li);
     });
 }
@@ -355,6 +480,11 @@ function createRemotePlayer(id, data) {
 
     scene.add(mesh);
     remotePlayers[id] = mesh;
+    
+    // 创建名牌
+    if (data.nickname) {
+        createNameTag(id, data.nickname, false);
+    }
 }
 
 function resetGame() {
@@ -387,7 +517,11 @@ function resetGame() {
     animations = [];
 
     // 通知服务器重置分数
-    socket.emit('updateScore', 0);
+    if (socket) {
+        socket.emit('updateScore', 0);
+        // 重置时也更新一下我的名牌 (防止断线重连等情况)
+        createNameTag(socket.id, nickname, true);
+    }
 
     // 初始方块
     createBlock(0, 0, 0, false);
@@ -721,6 +855,8 @@ function animate() {
                 rotationY: player.rotation.y
             });
         }
+        
+        updateNameTags(); // 更新名牌位置
     }
     
     // 更新远程玩家

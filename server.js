@@ -21,9 +21,21 @@ io.on('connection', (socket) => {
         z: 0,
         rotationY: 0,
         score: 0,
-        // 随机分配一个颜色，用于区分不同玩家
+        nickname: 'Unknown', // 默认昵称
         color: Math.random() * 0xffffff
     };
+
+    // 监听设置昵称
+    socket.on('setNickname', (nickname) => {
+        if (players[socket.id]) {
+            // 简单的防注入过滤
+            players[socket.id].nickname = nickname.substring(0, 12) || `Player ${socket.id.substr(0,4)}`;
+            
+            // 广播玩家信息更新 (包含昵称)
+            io.emit('playerInfoUpdate', players[socket.id]);
+            io.emit('leaderboardUpdate', getLeaderboard());
+        }
+    });
 
     // 发送当前所有在线玩家信息给新连接的客户端
     socket.emit('currentPlayers', players);
