@@ -8,9 +8,13 @@ const ResourceManager = {
         this.geometries.box = new THREE.BoxGeometry(config.cubeSize.width, config.cubeSize.height, config.cubeSize.depth);
         this.geometries.center = new THREE.CylinderGeometry(0.8, 0.8, 0.1, 32);
         this.geometries.particle = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+        this.geometries.item = new THREE.OctahedronGeometry(0.5); // 道具几何体
         
         this.materials.center = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
         this.materials.particle = new THREE.MeshBasicMaterial({ color: 0xffffff }); 
+        this.materials.item_bonus = new THREE.MeshPhongMaterial({ color: 0xffd700, emissive: 0xaa6600, emissiveIntensity: 0.5 }); // 金币/星星
+        this.materials.item_double = new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x0088aa, emissiveIntensity: 0.5 }); // 双倍积分
+        this.materials.item_magnet = new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0x880000, emissiveIntensity: 0.5 }); // 吸铁石
         
         // 生成程序化纹理
         this.textures.wood = this.createWoodTexture();

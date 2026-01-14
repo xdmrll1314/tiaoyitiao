@@ -50,6 +50,9 @@ let networkManager;     // 网络管理器
 // 游戏状态数据
 let blocks = [];                    // 存放所有方块的数组
 let score = 0;                      // 当前分数
+let scoreMultiplier = 1;            // 分数倍率
+let scoreMultiplierEndTime = 0;     // 倍率结束时间
+let magnetEndTime = 0;              // 吸铁石结束时间
 let combo = 0;                      // 连击次数（中心命中）
 let isGameRunning = false;          // 游戏运行状态标记
 let isCharging = false;             // 是否正在蓄力
@@ -387,6 +390,9 @@ function resetGame() {
 
     // 2. 重置变量
     score = 0;
+    scoreMultiplier = 1;
+    scoreMultiplierEndTime = 0;
+    magnetEndTime = 0;
     combo = 0;
     updatePlayerGlow(0); // 重置发光
     updateScoreUI();
@@ -516,6 +522,32 @@ function createBlock(x, z, animate = false, scale = 1) {
 }
 
 /**
+ * 🎁 生成道具
+ */
+function spawnItem(block, type) {
+    let geometry = ResourceManager.geometries.item;
+    let material;
+    
+    if (type === 'bonus') {
+        material = ResourceManager.materials.item_bonus;
+    } else {
+        material = ResourceManager.materials.item_double;
+    }
+    
+    const item = new THREE.Mesh(geometry, material);
+    // 方块中心在 y=0, 顶部在 y=1
+    // 道具悬浮在方块上方
+    item.position.set(0, 2, 0); 
+    
+    item.userData.isItem = true;
+    item.userData.itemType = type;
+    item.userData.floatOffset = Math.random() * 100;
+    
+    block.add(item);
+    block.userData.item = item; // 方便索引
+}
+
+/**
  * 👤 创建玩家角色
  */
 function createPlayer() {
@@ -540,9 +572,9 @@ function createPlayer() {
 function spawnNextBlock(animate = true) {
     const lastBlock = blocks[blocks.length - 1];
     let nextScale = 1;
+    let specialType = null;
     
-    // 处理 Buff 效果
-    let isMoving = false;
+    // 1. 处理外部/直播指令 Buff
     if (nextBlockBuff === 'large') {
         nextScale = 1.5;
         showFloatingText('方块变大!', 0xffff00);
@@ -550,9 +582,24 @@ function spawnNextBlock(animate = true) {
         nextScale = 0.6;
         showFloatingText('小心陷阱!', 0xff0000);
     } else if (nextBlockBuff === 'moving') {
-        isMoving = true;
+        specialType = 'moving';
         showFloatingText('移动方块!', 0xff0000);
     }
+    
+    // 2. 随机生成特殊方块 (仅在没有外部指令时)
+    if (!nextBlockBuff && score > 5) {
+        const rand = Math.random();
+        // 难度随分数增加
+        const prob = Math.min(0.1 + score / 500, 0.3); // 最大 30% 概率出特殊方块
+        
+        if (rand < prob) {
+            const typeRand = Math.random();
+            if (typeRand < 0.4) specialType = 'moving';     // 40% 移动
+            else if (typeRand < 0.7) specialType = 'sinking'; // 30% 下沉
+            else specialType = 'shrinking';                   // 30% 缩小
+        }
+    }
+
     nextBlockBuff = null; 
     currentBlockScale = nextScale;
 
@@ -586,16 +633,67 @@ function spawnNextBlock(animate = true) {
         targetRotationY = Math.atan2(dx, dz);
     }
     
-    if (isMoving) {
-        // 设置移动属性
+    // 应用特殊效果
+    if (specialType === 'moving') {
         block.userData.isMoving = true;
         block.userData.initialPos = { x, y: 0, z };
         block.userData.moveAxis = direction; // 'x' or 'z'
-        block.userData.moveSpeed = 0.05;
+        block.userData.moveSpeed = 0.03 + Math.random() * 0.04;
         block.userData.moveRange = 2.5; // 移动范围
-        block.userData.moveOffset = 0;
+        block.userData.moveOffset = Math.random() * Math.PI;
+    } else if (specialType === 'sinking') {
+        block.userData.isSinking = true;
+        // 视觉提示：稍微变暗
+        if (!block.material.map) { // 只有纯色方块才变色，纹理方块保持
+            block.material = block.material.clone();
+            block.material.color.offsetHSL(0, 0, -0.2);
+        }
+    } else if (specialType === 'shrinking') {
+        block.userData.isShrinking = true;
+    }
+    
+    // 🎁 随机生成道具 (20% 概率)
+    if (specialType !== 'moving' && score > 5 && Math.random() < 0.2) {
+        const r = Math.random();
+        let itemType = 'bonus';
+        if (r > 0.9) itemType = 'magnet'; // 10%
+        else if (r > 0.7) itemType = 'double'; // 20%
+        // 70% bonus
+        
+        spawnItem(block, itemType);
     }
 }
+
+/**
+ * 🎁 生成道具
+ */
+function spawnItem(block, type) {
+    if (!ResourceManager.geometries.item) return;
+
+    let geometry = ResourceManager.geometries.item;
+    let material;
+    
+    if (type === 'bonus') {
+        material = ResourceManager.materials.item_bonus;
+    } else if (type === 'double') {
+        material = ResourceManager.materials.item_double;
+    } else if (type === 'magnet') {
+        material = ResourceManager.materials.item_magnet;
+    }
+    
+    if (!material) return;
+    
+    const item = new THREE.Mesh(geometry, material);
+    item.position.set(0, 2, 0); 
+    
+    item.userData.isItem = true;
+    item.userData.itemType = type;
+    item.userData.floatOffset = Math.random() * 100;
+    
+    block.add(item);
+    block.userData.item = item;
+}    
+
 
 // 窗口调整处理
 function onWindowResize() {
@@ -614,7 +712,8 @@ function onWindowResize() {
  */
 function onMouseDown(e) {
     // 只有在游戏运行、静止且在地面时才能蓄力
-    if (!isGameRunning || velocity.y !== 0 || player.position.y < 0.9) return;
+    // 移除 player.position.y < 0.9 的限制，因为下沉方块会使高度降低
+    if (!isGameRunning || velocity.y !== 0) return;
     
     isCharging = true;
     chargeStartTime = Date.now();
@@ -737,18 +836,31 @@ function animate() {
             }
 
             // --- 物理模拟核心 ---
-            // 如果有垂直速度，或者不在地面 (y > 1)，则应用物理
-            if (velocity.y !== 0 || player.position.y > 1) {
+            // 1. 计算当前地面高度 (支持下沉方块)
+            let groundHeight = -10; 
+            for (let b of blocks) {
+                 const size = (b.userData.scale || 1) * config.cubeSize.width / 2;
+                 const dx = player.position.x - b.position.x;
+                 const dz = player.position.z - b.position.z;
+                 if (dx*dx + dz*dz < (size + 0.6)**2) {
+                     const h = b.position.y + 1;
+                     if (h > groundHeight) groundHeight = h;
+                 }
+            }
+
+            // 如果有垂直速度，或者高于当前地面一定距离，则应用物理
+            // 阈值设为 0.1 以容忍下沉方块的速度 (0.03)，避免每一帧都进入掉落状态
+            if (velocity.y !== 0 || player.position.y > groundHeight + 0.1) {
                 // 更新位置
                 player.position.x += velocity.x;
                 player.position.z += velocity.z;
                 player.position.y += velocity.y;
                 
-                // 应用重力 (改变垂直速度)
+                // 应用重力
                 velocity.y -= config.gravity; 
                 
                 // 空中翻滚动画
-                if (velocity.y > 0 || player.position.y > 1.5) {
+                if (velocity.y > 0 || player.position.y > groundHeight + 0.5) {
                     innerPlayer.rotation.x += rotateSpeed;
                     
                     // 拖尾特效
@@ -763,14 +875,13 @@ function animate() {
                 }
                 
                 // --- 落地检测 ---
-                // 当高度降到地面(y=1)以下，且速度向下时，检查是否落在方块上
-                if (player.position.y <= 1 && velocity.y < 0) {
+                if (player.position.y <= groundHeight && velocity.y < 0) {
                     if (checkLanding()) {
                         // 成功落地
-                        player.position.y = 1; // 修正高度
-                        velocity = { x: 0, y: 0, z: 0 }; // 速度归零
+                        player.position.y = groundHeight; 
+                        velocity = { x: 0, y: 0, z: 0 }; 
                         rotateSpeed = 0;
-                        innerPlayer.rotation.x = 0; // 重置旋转
+                        innerPlayer.rotation.x = 0; 
                         
                         // 落地弹动动画
                         animations.push({
@@ -788,12 +899,14 @@ function animate() {
                         });
 
                     } else {
-                        // 没落在方块上，继续掉落 (不做处理，自然会掉到 y < -5 触发 gameOver)
+                        // 没落在方块上，继续掉落
                     }
                 }
             } else {
-                // 在地面静止时的修正
-                 if (player.position.y !== 1) player.position.y = 1;
+                // 在地面静止时的修正 (跟随方块升降)
+                 if (groundHeight > -5 && Math.abs(player.position.y - groundHeight) < 0.2) {
+                     player.position.y = groundHeight;
+                 }
                  if (velocity.y !== 0) velocity.y = 0;
             } 
             
@@ -823,12 +936,27 @@ function animate() {
     if (cloudSystem) cloudSystem.update();
     if (rippleSystem) rippleSystem.update();
     
+    // 检查分数倍率过期
+    if (scoreMultiplier > 1 && Date.now() > scoreMultiplierEndTime) {
+        scoreMultiplier = 1;
+        showFloatingText('双倍时间结束', 0xcccccc);
+    }
+
+    // 检查吸铁石过期
+    if (magnetEndTime > 0 && Date.now() > magnetEndTime) {
+        magnetEndTime = 0;
+        showFloatingText('吸铁石失效', 0xcccccc);
+    }
+    
     // 动态更新环境颜色
     updateEnvironment(score);
     
-    // 移动方块逻辑
+    // 移动/特殊方块逻辑
     blocks.forEach(block => {
-        if (block.userData.isMoving && isGameRunning) {
+        if (!isGameRunning) return;
+        
+        // 1. 移动方块
+        if (block.userData.isMoving) {
             block.userData.moveOffset += block.userData.moveSpeed;
             const offset = Math.sin(block.userData.moveOffset) * block.userData.moveRange;
             
@@ -836,6 +964,60 @@ function animate() {
                 block.position.z = block.userData.initialPos.z + offset; 
             } else {
                 block.position.x = block.userData.initialPos.x + offset;
+            }
+        }
+        
+        // 2. 下沉方块 (玩家站立时下沉)
+        if (block.userData.isSinking && player) {
+            const blockSize = (block.userData.scale || 1) * config.cubeSize.width / 2;
+            const dx = player.position.x - block.position.x;
+            const dz = player.position.z - block.position.z;
+            
+            // 判定玩家是否站在方块上 (XZ范围 + Y高度接近)
+            // Block Top = block.position.y + 1
+            if (dx*dx + dz*dz < (blockSize + 0.5)**2 && Math.abs(player.position.y - (block.position.y + 1)) < 0.5) {
+                block.position.y -= 0.03; // 下沉速度
+            }
+        }
+        
+        // 3. 缩小方块 (玩家站立时缩小)
+        if (block.userData.isShrinking && player) {
+            const blockSize = (block.userData.scale || 1) * config.cubeSize.width / 2;
+            const dx = player.position.x - block.position.x;
+            const dz = player.position.z - block.position.z;
+            
+            if (dx*dx + dz*dz < (blockSize + 0.5)**2 && Math.abs(player.position.y - (block.position.y + 1)) < 0.5) {
+                block.scale.multiplyScalar(0.99);
+                block.userData.scale *= 0.99;
+                if (block.scale.x < 0.1) block.scale.setScalar(0.1); // 最小限制
+            }
+        }
+        
+        // 4. 道具旋转浮动 & 吸铁石吸引
+        if (block.userData.item) {
+            const item = block.userData.item;
+            let attracted = false;
+            
+            if (magnetEndTime > Date.now() && player) {
+                 const worldPos = new THREE.Vector3();
+                 item.getWorldPosition(worldPos);
+                 const dist = worldPos.distanceTo(player.position);
+                 
+                 if (dist < 8) {
+                     attracted = true;
+                     const target = player.position.clone();
+                     target.y += 1; 
+                     worldPos.lerp(target, 0.1);
+                     block.worldToLocal(worldPos);
+                     item.position.copy(worldPos);
+                     item.rotation.y += 0.2; 
+                 }
+            }
+            
+            if (!attracted) {
+                item.rotation.y += 0.05;
+                const time = Date.now() * 0.002 + item.userData.floatOffset;
+                item.position.y = 2 + Math.sin(time) * 0.2;
             }
         }
     });
@@ -977,9 +1159,9 @@ function checkLanding() {
     );
     const currentBlockSize = (currentBlock.userData.scale || 1) * config.cubeSize.width / 2;
     
-    if (distToCurrent < currentBlockSize + 0.3) {
+    if (distToCurrent < currentBlockSize + 0.6) {
         // 安全落回原处
-        player.position.y = 1; 
+        player.position.y = currentBlock.position.y + 1; 
         velocity = { x: 0, y: 0, z: 0 }; 
         rotateSpeed = 0;
         innerPlayer.rotation.x = 0; 
@@ -1003,13 +1185,36 @@ function checkLanding() {
         // 成功落地!
         Logger.success("Game", "✅ 落地成功!");
 
+        // 🎁 检查道具收集
+        if (lastBlock.userData.item) {
+            const item = lastBlock.userData.item;
+            const type = item.userData.itemType;
+            
+            // 移除道具
+            lastBlock.remove(item);
+            lastBlock.userData.item = null;
+            
+            // 应用效果
+            if (type === 'bonus') {
+                score += 5;
+                showFloatingText('额外+5分!', 0xffd700);
+                if(audioManager.playScore) audioManager.playScore(1);
+            } else if (type === 'double') {
+                scoreMultiplier = 2;
+                scoreMultiplierEndTime = Date.now() + 10000; // 10秒双倍
+                showFloatingText('双倍积分 10s!', 0x00ffff);
+                if(audioManager.playScore) audioManager.playScore(3);
+            } else if (type === 'magnet') {
+                magnetEndTime = Date.now() + 15000; // 15秒吸铁石
+                showFloatingText('吸铁石 15s!', 0xff0000);
+                if(audioManager.playScore) audioManager.playScore(2);
+            }
+        }
+
         // 停止方块移动，方便玩家进行下一次跳跃
         if (lastBlock.userData.isMoving) {
             lastBlock.userData.isMoving = false;
         }
-        
-        // 生成波纹特效 (Moved to if/else block for specific colors)
-        // rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
         
         // 播放音效
         audioManager.playLand();
@@ -1017,8 +1222,9 @@ function checkLanding() {
         // 判定是否是中心命中 (Perfect)
         if (distance < 0.5) {
             combo++;
-            score += 2 * combo; // 连击加分
-            showFloatingScore(2 * combo, true);
+            const points = (2 * combo) * scoreMultiplier;
+            score += points; // 连击加分
+            showFloatingScore(points, true);
             showFloatingText('Perfect!', 0xffd700); // 金色提示
             
             // 完美落地音效
@@ -1037,8 +1243,9 @@ function checkLanding() {
         } else {
             combo = 0;
             updatePlayerGlow(0); // 重置发光
-            score += 1;
-            showFloatingScore(1, false);
+            const points = 1 * scoreMultiplier;
+            score += points;
+            showFloatingScore(points, false);
             // 普通落地特效
             rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
             particleSystem.emit(player.position, 0xffffff, 15);
