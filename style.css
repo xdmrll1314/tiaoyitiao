@@ -100,380 +100,233 @@ body.streamer-mode canvas {
     color: #333;
 }
 
-#connection-status[data-state="connected"] {
-    background: rgba(76, 175, 80, 0.9);
+#login-modal, #game-over, #guide-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+}
+
+.login-box, .guide-box {
+    background: #fff;
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+    max-height: 85vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* 平滑滚动 */
+}
+
+/* 针对 game-over 特殊处理，因为它结构不同 */
+#game-over {
+    display: none;
+    flex-direction: column;
+    /* 保持全屏遮罩属性 */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 100;
+    backdrop-filter: blur(4px);
+    justify-content: center;
+    align-items: center;
+}
+
+/* 伪造一个内容框样式作用于 game-over 的直接子元素容器? 
+   由于 HTML 结构限制，建议修改 HTML 或使用以下 hack:
+   实际上 game-over 也是居中 flex。我们可以给它加一个内层 div 
+   或者让它看起来像全屏覆盖。
+   这里我们尝试修复它：让它表现为全屏遮罩，但内容居中显示。
+   为了给内容加白底，我们需要修改 HTML 结构，或者接受它现在的样子。
+   但在之前的 CSS 中，#game-over 同时在 .login-box 的选择器里。
+   我们把它从 .login-box 的选择器组中移除（上面已经移除了），
+   现在我们需要给 #game-over 内部元素加样式，或者给 #game-over 本身加背景色？
+   
+   最稳妥的方式是修改 HTML 结构。
+   这里先处理样式表。
+*/
+
+.login-box h2, .guide-box h2 {
+    margin-top: 0;
+    color: #333;
+}
+
+#nickname-input {
+    width: 100%;
+    padding: 12px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+.login-actions, .guide-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+button {
+    background: #409EFF;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #66b1ff;
+}
+
+button.secondary-btn {
+    background: #f0f2f5;
+    color: #606266;
+}
+
+button.secondary-btn:hover {
+    background: #e6e8eb;
+}
+
+#power-bar-container {
+    position: absolute;
+    bottom: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 20px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    display: none;
+    z-index: 20;
+}
+
+#power-bar {
+    width: 0%;
+    height: 100%;
+    background: #67C23A;
+    transition: width 0.1s linear;
+}
+
+#touch-indicator {
+    position: absolute;
+    bottom: 15%;
+    width: 100%;
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    pointer-events: none;
 }
 
 #leaderboard {
     position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    padding: 15px;
-    border-radius: 15px;
+    top: 60px;
+    left: 16px;
     width: 200px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    max-height: 300px;
+    overflow-y: auto;
     z-index: 15;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    font-size: 14px;
+    display: none !important;
 }
 
 .lb-tabs {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(0,0,0,0.1);
-    padding-bottom: 5px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eee;
 }
 
 .lb-tab {
+    flex: 1;
     background: none;
-    border: none;
-    font-size: 14px;
     color: #999;
-    padding: 2px 5px;
-    cursor: pointer;
-    font-weight: 600;
+    padding: 5px;
+    font-size: 12px;
+    border-radius: 0;
 }
 
 .lb-tab.active {
     color: #333;
-    border-bottom: 2px solid #667eea;
+    border-bottom: 2px solid #409EFF;
+    background: none;
 }
 
 .lb-list {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 200px;
-    overflow-y: auto;
+    display: none;
+}
+
+.lb-list.active {
+    display: block;
 }
 
 .lb-list li {
     display: flex;
     justify-content: space-between;
-    font-size: 14px;
-    margin-bottom: 5px;
+    padding: 4px 0;
+    border-bottom: 1px dashed #eee;
+}
+
+/* Character Selector */
+.character-selector {
+    margin: 15px 0;
+    text-align: left;
+}
+
+.char-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.char-option {
+    padding: 8px 4px;
+    background: #f0f2f5;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    font-size: 13px;
     color: #555;
-}
-
-.lb-list li span:first-child {
-    font-weight: bold;
-    color: #333;
-}
-
-#game-over {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 80%;
-    max-width: 320px;
-    transform: translate(-50%, -50%);
-    background: rgba(255, 255, 255, 0.98);
-    color: #333;
-    padding: 40px 30px;
-    border-radius: 30px;
-    text-align: center;
-    z-index: 20;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-    display: none;
-    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes popIn {
-    from { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
-    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-}
-
-#game-over h2 {
-    margin: 0 0 10px 0;
-    font-size: 28px;
-    font-weight: 800;
-    color: #2c3e50;
-}
-
-#final-score {
-    font-size: 64px;
-    font-weight: 800;
-    color: #333;
-    margin: 20px 0 40px 0;
-}
-
-#restart-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 18px 0;
-    width: 100%;
-    font-size: 20px;
-    font-weight: 600;
-    border-radius: 50px;
     cursor: pointer;
-    transition: transform 0.1s;
-    outline: none;
-    box-shadow: 0 10px 20px rgba(118, 75, 162, 0.3);
-    -webkit-appearance: none;
-}
-
-#restart-btn:active {
-    transform: scale(0.96);
-}
-
-button:focus-visible {
-    outline: 2px solid #667eea;
-    outline-offset: 2px;
-}
-
-.floating-score {
-    position: absolute;
-    color: #333;
-    font-weight: 800;
-    font-size: 32px;
-    pointer-events: none;
-    animation: floatUp 0.8s ease-out forwards;
-    z-index: 15;
-    text-shadow: 0 2px 4px rgba(255,255,255,0.8);
-}
-
-@keyframes floatUp {
-    0% { transform: translateY(0) scale(1); opacity: 1; }
-    100% { transform: translateY(-60px) scale(1.1); opacity: 0; }
-}
-
-/* 触摸指示器 */
-#touch-indicator {
-    position: absolute;
-    bottom: 10%;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #999;
-    font-size: 14px;
-    animation: pulse 2s infinite;
-    pointer-events: none;
-}
-
-@keyframes pulse {
-    0% { opacity: 0.5; }
-    50% { opacity: 1; }
-    100% { opacity: 0.5; }
-}
-
-/* 登录弹窗 */
-#login-modal {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.95);
-    z-index: 100;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.login-box {
+    transition: all 0.2s;
     text-align: center;
-    width: 80%;
-    max-width: 320px;
-}
-
-.login-box h2 {
-    font-size: 28px;
-    color: #333;
-    margin-bottom: 30px;
-}
-
-#nickname-input {
-    width: 100%;
-    padding: 15px;
-    font-size: 18px;
-    border: 2px solid #ddd;
-    border-radius: 10px;
-    margin-bottom: 20px;
-    outline: none;
-    box-sizing: border-box;
-    text-align: center;
-}
-
-#nickname-input:focus {
-    border-color: #667eea;
-}
-
-.login-actions {
-    display: flex;
-    gap: 10px;
-}
-
-#start-game-btn {
-    flex: 2;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 15px 0;
-    font-size: 18px;
-    font-weight: 600;
-    border-radius: 50px;
-    cursor: pointer;
-    box-shadow: 0 10px 20px rgba(118, 75, 162, 0.3);
-}
-
-#spectate-btn {
-    flex: 1;
-    background: #f0f0f0;
-    color: #555;
-    border: 1px solid #ccc;
-    padding: 15px 0;
-    font-size: 16px;
-    font-weight: 600;
-    border-radius: 50px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-#spectate-btn:hover {
-    background: #e0e0e0;
-}
-
-/* 玩家名牌 */
-.player-name-tag {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    pointer-events: none;
-    transform: translate(-50%, -100%);
     white-space: nowrap;
-    z-index: 5;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-}
-
-.player-name-tag.me {
-    background: rgba(102, 126, 234, 0.8);
-    font-weight: bold;
-}
-
-/* 蓄力条 */
-#power-bar-container {
-    position: absolute;
-    top: 50%; /* 移动到角色附近或屏幕中心方便观察，或者放在手指按压位置附近 */
-    left: 50%;
-    transform: translate(-50%, -150px); /* 默认放在上方一点 */
-    width: 100px;
-    height: 10px;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 5px;
     overflow: hidden;
-    display: none; /* 默认隐藏，蓄力时显示 */
-    pointer-events: none;
-    z-index: 20;
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    text-overflow: ellipsis;
 }
 
-#power-bar {
-    width: 0%;
-    height: 100%;
-    background: linear-gradient(to right, #67C23A, #E6A23C, #F56C6C);
-    border-radius: 5px;
-    transition: width 0.1s linear;
+.char-option:hover {
+    background: #e6f7ff;
+    border-color: #1890ff;
+    color: #1890ff;
 }
 
-#guide-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.45);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 200;
-    padding: 16px;
-    box-sizing: border-box;
-}
-
-.guide-box {
-    background: #fff;
-    border-radius: 16px;
-    padding: 20px 20px 16px 20px;
-    width: 90%;
-    max-width: 360px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.15);
-}
-
-.guide-box h2 {
-    margin: 0 0 12px 0;
-    font-size: 22px;
-    color: #2c3e50;
-}
-
-.guide-box ol {
-    margin: 0 0 16px 18px;
-    padding: 0;
-    color: #555;
-    line-height: 1.5;
-}
-
-.guide-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.guide-actions button {
-    flex: 1;
-    padding: 12px 0;
-    border: none;
-    border-radius: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 8px 18px rgba(0,0,0,0.12);
-}
-
-#guide-close {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.char-option.active {
+    background: #1890ff;
+    border-color: #1890ff;
     color: #fff;
-}
-
-#guide-never {
-    background: #eef2ff;
-    color: #4a5568;
-}
-
-/* 移动端适配 */
-@media (max-width: 600px) {
-    #top-actions {
-        top: 10px;
-        left: 10px;
-        transform-origin: top left;
-        transform: scale(0.92);
-    }
-
-    #leaderboard {
-        width: 140px;
-        padding: 10px;
-        top: 10px;
-        right: 10px;
-        transform-origin: top right;
-        transform: scale(0.8); /* 整体缩小 */
-    }
-
-    #leaderboard h3 {
-        font-size: 14px;
-        margin-bottom: 5px;
-    }
-
-    #leaderboard-list li {
-        font-size: 12px;
-        margin-bottom: 3px;
-    }
-
-    #score {
-        font-size: 60px;
-    }
-    
-    #touch-indicator {
-        bottom: 15%; /* 稍微上移避免被某些手机手势条遮挡 */
-    }
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
 }

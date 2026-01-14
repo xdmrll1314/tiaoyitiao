@@ -109,8 +109,21 @@ io.on('connection', (socket) => {
         rotationY: 0,
         score: 0,
         nickname: 'Unknown', // 默认昵称
+        characterType: 'nezha', // 默认角色类型
         color: Math.random() * 0xffffff
     };
+
+    // 监听设置角色类型
+    socket.on('setCharacterType', (type) => {
+        if (players[socket.id]) {
+            const validTypes = ['nezha', 'wukong', 'bajie', 'hulk', 'captain', 'thor'];
+            if (validTypes.includes(type)) {
+                players[socket.id].characterType = type;
+            }
+            // 广播玩家信息更新
+            io.emit('playerInfoUpdate', players[socket.id]);
+        }
+    });
 
     // 监听设置昵称
     socket.on('setNickname', (nickname) => {

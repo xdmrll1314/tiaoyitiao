@@ -70,6 +70,7 @@ let nextBlockBuff = null;           // 下一个方块的特殊效果 ('large', 
 let isWaitingRevive = false;        // 是否等待复活
 let currentBlockScale = 1;          // 当前方块缩放比例
 let isStreamerMode = false;         // 是否处于主播模式
+let selectedCharacterType = 'nezha';// 当前选择的角色类型
 
 // 多人模式变量
 let isSpectator = false;            // 是否为观战者
@@ -237,6 +238,21 @@ function setupEventListeners() {
         }
     });
 
+    // 角色选择逻辑
+    const charOptions = document.querySelectorAll('.char-option');
+    charOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            // 移除所有 active 类
+            charOptions.forEach(opt => opt.classList.remove('active'));
+            // 添加当前 active 类
+            option.classList.add('active');
+            // 更新选择的角色
+            selectedCharacterType = option.dataset.type;
+            // 播放点击音效 (可选)
+            if (audioManager && audioManager.playClick) audioManager.playClick();
+        });
+    });
+
     // 登录按钮
     document.getElementById('start-game-btn').addEventListener('click', () => {
         const input = document.getElementById('nickname-input');
@@ -289,8 +305,8 @@ function spawnHeartEffect(random) {
  * ▶️ 开始游戏
  */
 function startGame() {
-    Logger.info("Game", `开始游戏，玩家: ${nickname}`);
-    networkManager.connect(nickname);
+    Logger.info("Game", `开始游戏，玩家: ${nickname}, 角色: ${selectedCharacterType}`);
+    networkManager.connect(nickname, selectedCharacterType);
     resetGame();
 }
 
@@ -477,7 +493,7 @@ function createBlock(x, z, animate = false, scale = 1) {
 function createPlayer() {
     Logger.info("Entities", "创建主角 Player");
     // 调用实体工厂创建 Mesh
-    player = createCharacterMesh(true);
+    player = createCharacterMesh(true, selectedCharacterType);
     scene.add(player);
 }
 
@@ -1012,7 +1028,7 @@ function finalizeGameOver() {
     
     Logger.info("Game", `🏁 游戏结束! 最终得分: ${score}`);
     document.getElementById('final-score').innerText = score;
-    document.getElementById('game-over').style.display = 'block';
+    document.getElementById('game-over').style.display = 'flex';
     
     if (networkManager) {
         networkManager.emitScore(score); 

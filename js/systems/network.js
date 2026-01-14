@@ -10,12 +10,14 @@ class NetworkManager {
         this.statusHandler = null;
         this.scoreGetter = null;
         this.nickname = '';
+        this.characterType = 'nezha';
         this.leaderboardUpdateCallback = null;
     }
 
-    connect(nickname) {
+    connect(nickname, characterType = 'nezha') {
         Logger.info("Network", `🔗 开始连接服务器: ${nickname}`, "建立Socket.io长连接");
         this.nickname = nickname;
+        this.characterType = characterType;
         this.notifyStatus('connecting');
         
         // 检查 socket.io 是否加载
@@ -39,6 +41,7 @@ class NetworkManager {
         this.socket.on('connect', () => {
             this.notifyStatus('connected');
             this.socket.emit('setNickname', this.nickname);
+            this.socket.emit('setCharacterType', this.characterType);
             const currentScore = this.scoreGetter ? this.scoreGetter() : 0;
             this.socket.emit('scoreUpdate', currentScore);
         });
@@ -55,6 +58,7 @@ class NetworkManager {
             this.notifyStatus('connected');
             this.clearRemoteState();
             this.socket.emit('setNickname', this.nickname);
+            this.socket.emit('setCharacterType', this.characterType);
             const currentScore = this.scoreGetter ? this.scoreGetter() : 0;
             this.socket.emit('scoreUpdate', currentScore);
         });
@@ -176,7 +180,7 @@ class NetworkManager {
         if (data.isSpectator) return;
 
         // 远程玩家也是哪吒，但可能半透明或者颜色不同
-        const mesh = createCharacterMesh(false); 
+        const mesh = createCharacterMesh(false, data.characterType || 'nezha'); 
         mesh.position.set(data.x, data.y, data.z);
         mesh.rotation.y = data.rotationY;
         

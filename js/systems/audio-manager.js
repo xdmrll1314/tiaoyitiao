@@ -83,6 +83,10 @@ class AudioManager {
         this.playTone(80, 'sawtooth', 0.5, 0.2);
     }
 
+    playClick() {
+        this.playTone(600, 'sine', 0.05);
+    }
+
     setEnabled(flag) {
         this.enabled = !!flag;
         if (!this.enabled) {

@@ -19,9 +19,22 @@
         <div class="login-box">
             <h2>欢迎来到跳一跳</h2>
             <input type="text" id="nickname-input" placeholder="请输入你的昵称" maxlength="12">
+            
+            <div class="character-selector">
+                <h3 style="margin: 10px 0; font-size: 16px; color: #555;">选择角色</h3>
+                <div class="char-options">
+                    <div class="char-option active" data-type="nezha">哪吒</div>
+                    <div class="char-option" data-type="wukong">孙悟空</div>
+                    <div class="char-option" data-type="bajie">猪八戒</div>
+                    <div class="char-option" data-type="hulk">绿巨人</div>
+                    <div class="char-option" data-type="captain">美队</div>
+                    <div class="char-option" data-type="thor">雷神</div>
+                </div>
+            </div>
+
             <div class="login-actions">
                 <button id="start-game-btn">开始游戏</button>
-                <button id="spectate-btn" class="secondary-btn">查看榜单</button>
+                <button id="spectate-btn" class="secondary-btn" style="display: none;">查看榜单</button>
             </div>
             <div style="margin-top: 15px;">
                 <a href="#" id="enter-streamer-mode" style="color: #667eea; font-size: 14px; text-decoration: none;">进入主播演示模式 (测试互动)</a>
@@ -53,9 +66,11 @@
         </ul>
     </div>
     <div id="game-over">
-        <h2>游戏结束</h2>
-        <div id="final-score">0</div>
-        <button id="restart-btn">再来一次</button>
+        <div class="login-box" style="width: 80%; max-width: 300px; padding: 20px;">
+            <h2>游戏结束</h2>
+            <div id="final-score">0</div>
+            <button id="restart-btn">再来一次</button>
+        </div>
     </div>
     <div id="guide-overlay">
         <div class="guide-box">
