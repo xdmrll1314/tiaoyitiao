@@ -25,6 +25,11 @@ let connectionStatusTimer = null;
 
 let cameraShake = { x: 0, y: 0, z: 0 }; // 相机震动
 let cameraZoom = 1; // 相机缩放
+let nextBlockBuff = null; // 'large', 'small'
+let likeCount = 0;
+let isWaitingRevive = false;
+let reviveTimer = null;
+let currentBlockScale = 1;
 
 // 多人游戏变量
 let isSpectator = false;
@@ -266,6 +271,17 @@ function initLiveSimulator() {
         const user = document.getElementById('sim-user').value || '土豪';
         onLiveGift(user, 'rocket');
     });
+
+    // 模拟点赞和炸弹
+    const likeBtn = document.createElement('button');
+    likeBtn.innerText = '模拟点赞';
+    likeBtn.onclick = () => onLiveLike('观众' + Math.floor(Math.random()*100));
+    simDiv.appendChild(likeBtn);
+
+    const bombBtn = document.createElement('button');
+    bombBtn.innerText = '模拟炸弹';
+    bombBtn.onclick = () => onLiveGift('捣蛋鬼', 'bomb');
+    simDiv.appendChild(bombBtn);
 }
 
 function onLiveComment(user, content) {
@@ -280,18 +296,81 @@ function onLiveComment(user, content) {
     showToast(`${user}: ${content}`);
 }
 
+function onLiveLike(user) {
+    // console.log(`[直播点赞] ${user}`);
+    likeCount++;
+    spawnHeartEffect(true); // 借用爱心特效
+    
+    // 每 10 个赞，触发大方块 Buff
+    if (likeCount % 10 === 0) {
+        nextBlockBuff = 'large';
+        showFloatingText('点赞助力! 下个方块变大', 0x67C23A);
+    }
+}
+
 function onLiveGift(user, type) {
     console.log(`[直播礼物] ${user} 送出了 ${type}`);
     
-    showToast(`${user} 送出了 ${type === 'heart' ? '❤️' : '🚀'}!`);
+    let icon = '🎁';
+    if (type === 'heart') icon = '❤️';
+    else if (type === 'rocket') icon = '🚀';
+    else if (type === 'bomb') icon = '💣';
+    
+    showToast(`${user} 送出了 ${icon}!`);
     
     if (type === 'rocket') {
-        // 触发全屏特效
         triggerFireworks();
+        if (isWaitingRevive) {
+            revivePlayer();
+        } else {
+             // 游戏中送火箭，加分
+             score += 50;
+             updateScoreUI();
+             showFloatingScore(50, true);
+        }
+    } else if (type === 'bomb') {
+        nextBlockBuff = 'small';
+        showFloatingText('小心! 捣蛋鬼出没', 0xF56C6C);
     } else {
         // 小特效
         spawnHeartEffect();
+        score += 5;
+        updateScoreUI();
     }
+}
+
+function showFloatingText(text, colorHex) {
+    const div = document.createElement('div');
+    div.innerText = text;
+    div.style.position = 'absolute';
+    div.style.top = '30%';
+    div.style.left = '50%';
+    div.style.transform = 'translate(-50%, -50%)';
+    div.style.color = '#' + colorHex.toString(16);
+    div.style.fontSize = '24px';
+    div.style.fontWeight = 'bold';
+    div.style.textShadow = '0 0 5px black';
+    div.style.pointerEvents = 'none';
+    div.style.animation = 'floatUpFade 1.5s forwards';
+    document.body.appendChild(div);
+    
+    // 动态添加动画样式（如果不存在）
+    if (!document.getElementById('float-anim-style')) {
+        const style = document.createElement('style');
+        style.id = 'float-anim-style';
+        style.innerHTML = `
+            @keyframes floatUpFade {
+                0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+                20% { opacity: 1; transform: translate(-50%, -20px) scale(1.2); }
+                100% { opacity: 0; transform: translate(-50%, -80px) scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    setTimeout(() => {
+        if (div.parentNode) div.parentNode.removeChild(div);
+    }, 1500);
 }
 
 function spawnAudienceCharacter(name) {
@@ -706,18 +785,21 @@ function resetGame() {
     camera.lookAt(0, 0, 0);
 }
 
-function createBlock(x, z, delay = 0) {
+function createBlock(x, z, delay = 0, scale = 1) {
     const color = config.colors[Math.floor(Math.random() * config.colors.length)];
     const geometry = ResourceManager.geometries.box;
     const material = ResourceManager.getColoredMaterial(color);
     const block = new THREE.Mesh(geometry, material);
     
     block.position.set(x, 0, z);
+    block.scale.set(scale, 1, scale); // 应用缩放
     block.castShadow = true;
     block.receiveShadow = true;
     
     const center = new THREE.Mesh(ResourceManager.geometries.center, ResourceManager.materials.center);
     center.position.set(0, config.cubeSize.height / 2 + 0.05, 0); 
+    // 中心点标记也要根据方块大小调整吗？不，保持原大小即可，或者稍微调大一点点
+    // center.scale.set(scale, 1, scale); 
     block.add(center);
 
     if (delay > 0) {
@@ -743,6 +825,7 @@ function createBlock(x, z, delay = 0) {
     scene.add(block);
     blocks.push(block);
     block.userData.color = color;
+    block.userData.scale = scale; // 记录缩放比例
     return block;
 }
 
@@ -756,7 +839,30 @@ function createPlayer() {
 
 function spawnNextBlock(animate = true) {
     const lastBlock = blocks[blocks.length - 1];
-    const distance = 4 + Math.random() * 5; 
+    // 根据当前方块和下一个方块的缩放调整距离，避免重叠或太远
+    // 默认距离是 4 + random * 5
+    // 如果方块变大了，距离应该适当增加
+    
+    // 确定下一个方块的缩放
+    let nextScale = 1;
+    if (nextBlockBuff === 'large') {
+        nextScale = 1.5;
+        showFloatingText('方块变大!', 0xffff00);
+    } else if (nextBlockBuff === 'small') {
+        nextScale = 0.6;
+        showFloatingText('小心陷阱!', 0xff0000);
+    }
+    nextBlockBuff = null; // 重置 buff
+    currentBlockScale = nextScale;
+
+    // 基础距离
+    let minDistance = 4;
+    // 考虑当前方块和下一个方块的半径
+    // 默认半径是 2 (width 4 / 2)
+    const lastScale = lastBlock.userData.scale || 1;
+    minDistance = 2 * lastScale + 2 * nextScale + Math.random() * 5;
+
+    const distance = minDistance; 
     const direction = Math.random() > 0.5 ? 'x' : 'z';
     
     let x = lastBlock.position.x;
@@ -770,7 +876,7 @@ function spawnNextBlock(animate = true) {
         targetRotationY = Math.PI; 
     }
     
-    createBlock(x, z, animate ? 1 : 0);
+    createBlock(x, z, animate ? 1 : 0, nextScale);
 }
 
 function onWindowResize() {
@@ -880,74 +986,76 @@ function animate() {
     }
     
     if (isGameRunning) {
-        if (player.rotation.y !== targetRotationY) {
-            let delta = targetRotationY - player.rotation.y;
-            if (Math.abs(delta) > 0.01) {
-                player.rotation.y += delta * 0.1;
-            } else {
-                player.rotation.y = targetRotationY;
-            }
-        }
-
-        if (velocity.y !== 0 || player.position.y > 1) {
-            player.position.x += velocity.x;
-            player.position.z += velocity.z;
-            player.position.y += velocity.y;
-            velocity.y -= config.gravity; 
-            
-            if (velocity.y > 0 || player.position.y > 1.5) {
-                innerPlayer.rotation.x += rotateSpeed;
-            }
-
-            if (player.userData.wheels) {
-                player.userData.wheels.forEach(wheel => {
-                    wheel.rotation.z -= 0.2; 
-                });
-            }
-            
-            if (player.position.y <= 1 && velocity.y < 0) {
-                if (checkLanding()) {
-                    player.position.y = 1;
-                    velocity = { x: 0, y: 0, z: 0 };
-                    rotateSpeed = 0;
-                    innerPlayer.rotation.x = 0; 
-                    
-                    animations.push({
-                        time: 0,
-                        duration: 10,
-                        update: function() {
-                            this.time++;
-                            const p = this.time / this.duration;
-                            const y = 1 - Math.sin(p * Math.PI) * 0.2;
-                            innerPlayer.scale.y = y;
-                            innerPlayer.scale.x = 1 + (1-y)/2;
-                            innerPlayer.scale.z = 1 + (1-y)/2;
-                            return p >= 1;
-                        }
-                    });
-
+        if (player) {
+            if (player.rotation.y !== targetRotationY) {
+                let delta = targetRotationY - player.rotation.y;
+                if (Math.abs(delta) > 0.01) {
+                    player.rotation.y += delta * 0.1;
                 } else {
+                    player.rotation.y = targetRotationY;
                 }
             }
-        } else {
-             if (player.position.y !== 1) player.position.y = 1;
-             if (velocity.y !== 0) velocity.y = 0;
-        } 
-        
-        if (player.position.y < -5) {
-            gameOver();
+
+            if (velocity.y !== 0 || player.position.y > 1) {
+                player.position.x += velocity.x;
+                player.position.z += velocity.z;
+                player.position.y += velocity.y;
+                velocity.y -= config.gravity; 
+                
+                if (velocity.y > 0 || player.position.y > 1.5) {
+                    innerPlayer.rotation.x += rotateSpeed;
+                }
+
+                if (player.userData.wheels) {
+                    player.userData.wheels.forEach(wheel => {
+                        wheel.rotation.z -= 0.2; 
+                    });
+                }
+                
+                if (player.position.y <= 1 && velocity.y < 0) {
+                    if (checkLanding()) {
+                        player.position.y = 1;
+                        velocity = { x: 0, y: 0, z: 0 };
+                        rotateSpeed = 0;
+                        innerPlayer.rotation.x = 0; 
+                        
+                        animations.push({
+                            time: 0,
+                            duration: 10,
+                            update: function() {
+                                this.time++;
+                                const p = this.time / this.duration;
+                                const y = 1 - Math.sin(p * Math.PI) * 0.2;
+                                innerPlayer.scale.y = y;
+                                innerPlayer.scale.x = 1 + (1-y)/2;
+                                innerPlayer.scale.z = 1 + (1-y)/2;
+                                return p >= 1;
+                            }
+                        });
+
+                    } else {
+                    }
+                }
+            } else {
+                 if (player.position.y !== 1) player.position.y = 1;
+                 if (velocity.y !== 0) velocity.y = 0;
+            } 
+            
+            if (player.position.y < -5) {
+                gameOver();
+            }
         }
         
         updateCamera();
         
         // 发送玩家状态（通过 NetworkManager 节流）
-        if (networkManager) {
+        if (networkManager && player) {
             networkManager.emitMovement(player.position, player.rotation.y);
         }
         
         // 更新名牌位置
         if (networkManager) {
-            networkManager.updateNameTags(player.position, camera);
+            networkManager.updateNameTags(player ? player.position : null, camera);
         }
     }
     
@@ -1051,14 +1159,19 @@ function checkLanding() {
         const b = blocks[i];
         const dx = Math.abs(player.position.x - b.position.x);
         const dz = Math.abs(player.position.z - b.position.z);
-    if (dx < 2.3 && dz < 2.3) {
-        landedBlock = b;
-        landedIndex = i;
-        break;
+        
+        // 动态判定范围
+        const scale = b.userData.scale || 1;
+        const limit = 2 * scale + 0.3; // 基础半径 2 * 缩放 + 容差
+        
+        if (dx < limit && dz < limit) {
+            landedBlock = b;
+            landedIndex = i;
+            break;
+        }
     }
-}
 
-if (landedBlock) {
+    if (landedBlock) {
         audioManager.playLand();
         particleSystem.emit(player.position, landedBlock.userData.color);
         
@@ -1157,6 +1270,72 @@ function showFloatingScore(num, isPerfect) {
 function gameOver() {
     isGameRunning = false;
     audioManager.playFail();
+
+    // 如果已经是复活状态，不再触发
+    if (isWaitingRevive) return;
+    
+    // 如果是观战模式，直接结束
+    if (isSpectator) {
+        finalizeGameOver();
+        return;
+    }
+
+    isWaitingRevive = true;
+    
+    // 创建或显示复活倒计时界面
+    let reviveOverlay = document.getElementById('revive-overlay');
+    if (!reviveOverlay) {
+        reviveOverlay = document.createElement('div');
+        reviveOverlay.id = 'revive-overlay';
+        reviveOverlay.style.position = 'absolute';
+        reviveOverlay.style.top = '0';
+        reviveOverlay.style.left = '0';
+        reviveOverlay.style.width = '100%';
+        reviveOverlay.style.height = '100%';
+        reviveOverlay.style.background = 'rgba(0,0,0,0.6)';
+        reviveOverlay.style.display = 'flex';
+        reviveOverlay.style.flexDirection = 'column';
+        reviveOverlay.style.justifyContent = 'center';
+        reviveOverlay.style.alignItems = 'center';
+        reviveOverlay.style.color = '#fff';
+        reviveOverlay.style.zIndex = '100';
+        
+        reviveOverlay.innerHTML = `
+            <h2>等待复活...</h2>
+            <div id="revive-timer" style="font-size: 48px; font-weight: bold; color: #E6A23C;">10</div>
+            <p style="font-size: 18px; margin-top: 10px;">打赏 🚀 火箭 立即复活！</p>
+            <button id="skip-revive-btn" style="margin-top: 20px; padding: 10px 20px; background: transparent; border: 1px solid #fff; color: #fff; border-radius: 20px; cursor: pointer;">放弃治疗</button>
+        `;
+        document.body.appendChild(reviveOverlay);
+        
+        document.getElementById('skip-revive-btn').onclick = () => {
+            clearTimeout(reviveTimer);
+            finalizeGameOver();
+        };
+    }
+    
+    reviveOverlay.style.display = 'flex';
+    let timeLeft = 10;
+    const timerEl = document.getElementById('revive-timer');
+    timerEl.innerText = timeLeft;
+    
+    const tick = () => {
+        timeLeft--;
+        if (timeLeft >= 0) {
+            timerEl.innerText = timeLeft;
+            reviveTimer = setTimeout(tick, 1000);
+        } else {
+            finalizeGameOver();
+        }
+    };
+    reviveTimer = setTimeout(tick, 1000);
+}
+
+function finalizeGameOver() {
+    isWaitingRevive = false;
+    const reviveOverlay = document.getElementById('revive-overlay');
+    if (reviveOverlay) reviveOverlay.style.display = 'none';
+    
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over').style.display = 'block';
 
@@ -1164,6 +1343,41 @@ function gameOver() {
     if (networkManager && !isSpectator) {
         networkManager.submitResult(score);
     }
+}
+
+function revivePlayer() {
+    if (!isWaitingRevive) return;
+    
+    clearTimeout(reviveTimer);
+    isWaitingRevive = false;
+    
+    const reviveOverlay = document.getElementById('revive-overlay');
+    if (reviveOverlay) reviveOverlay.style.display = 'none';
+    
+    // 恢复位置到起跳方块
+    const targetBlock = blocks.length >= 2 ? blocks[blocks.length - 2] : blocks[0];
+    
+    // 重置玩家状态
+    player.position.set(targetBlock.position.x, 1, targetBlock.position.z);
+    player.rotation.set(0, 0, 0); // 重置旋转
+    // 还需要根据下一个方块的位置设置朝向，不过 animate 会处理一点点，但最好还是设置好
+    // 如果有下一个方块，计算一下方向
+    if (blocks.length >= 2) {
+         const nextBlock = blocks[blocks.length - 1];
+         if (nextBlock.position.x < targetBlock.position.x) {
+             targetRotationY = -Math.PI / 2;
+         } else {
+             targetRotationY = Math.PI;
+         }
+         player.rotation.y = targetRotationY;
+    }
+    
+    velocity = { x: 0, y: 0, z: 0 };
+    innerPlayer.rotation.x = 0;
+    innerPlayer.scale.set(1, 1, 1);
+    
+    isGameRunning = true;
+    showFloatingText('复活成功!', 0x67C23A);
 }
 
 init();
