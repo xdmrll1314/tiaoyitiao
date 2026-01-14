@@ -407,6 +407,9 @@ function resetGame() {
     //    在 (0, 0, 0) 位置创建一个方块
     createBlock(0, 0, false);
     
+    // 初始化环境颜色
+    updateEnvironment(0);
+    
     // 5. 创建玩家 (如果不是观战模式)
     if (!isSpectator) {
         createPlayer();
@@ -444,7 +447,23 @@ function createBlock(x, z, animate = false, scale = 1) {
     const color = config.colors[Math.floor(Math.random() * config.colors.length)];
     // 复用几何体和材质，优化性能
     const geometry = ResourceManager.geometries.box;
-    const material = ResourceManager.getColoredMaterial(color);
+    
+    // 随机选择材质类型：纯色、木纹、石材、网格
+    let material;
+    const rand = Math.random();
+    if (rand < 0.6) {
+        // 60% 概率纯色
+        material = ResourceManager.getColoredMaterial(color);
+    } else if (rand < 0.75) {
+        // 15% 木纹
+        material = ResourceManager.getTexturedMaterial('wood', color);
+    } else if (rand < 0.9) {
+        // 15% 石材
+        material = ResourceManager.getTexturedMaterial('stone', color);
+    } else {
+        // 10% 网格
+        material = ResourceManager.getTexturedMaterial('grid', color);
+    }
     
     const block = new THREE.Mesh(geometry, material);
     // 设置位置：y=0 表示方块中心在水平面上
@@ -731,6 +750,11 @@ function animate() {
                 // 空中翻滚动画
                 if (velocity.y > 0 || player.position.y > 1.5) {
                     innerPlayer.rotation.x += rotateSpeed;
+                    
+                    // 拖尾特效
+                    if (particleSystem) {
+                         particleSystem.emitTrail(player.position);
+                    }
                 }
 
                 // 风火轮旋转
@@ -799,6 +823,9 @@ function animate() {
     if (cloudSystem) cloudSystem.update();
     if (rippleSystem) rippleSystem.update();
     
+    // 动态更新环境颜色
+    updateEnvironment(score);
+    
     // 移动方块逻辑
     blocks.forEach(block => {
         if (block.userData.isMoving && isGameRunning) {
@@ -845,6 +872,38 @@ function updatePlayerGlow(comboLevel) {
         }
     });
 }
+
+/**
+ * 🌍 动态环境系统
+ * 根据分数改变背景颜色
+ */
+function updateEnvironment(currentScore) {
+    if (!scene) return;
+    
+    // 定义不同阶段的背景色
+    const colors = {
+        day: new THREE.Color(0xd4e9ff),    // 白天 (0分)
+        dusk: new THREE.Color(0xffd8a8),   // 黄昏 (50分)
+        night: new THREE.Color(0x1a1a2e)   // 深夜 (100分+)
+    };
+    
+    let targetColor;
+    
+    if (currentScore < 50) {
+        // 白天 -> 黄昏
+        const t = Math.min(currentScore / 50, 1);
+        targetColor = colors.day.clone().lerp(colors.dusk, t);
+    } else {
+        // 黄昏 -> 深夜
+        const t = Math.min((currentScore - 50) / 50, 1);
+        targetColor = colors.dusk.clone().lerp(colors.night, t);
+    }
+    
+    scene.background = targetColor;
+    // 也可以同步调整雾气颜色，如果之后添加了 Fog
+    // if (scene.fog) scene.fog.color.copy(targetColor);
+}
+
 
 
 /**

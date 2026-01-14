@@ -37,6 +37,33 @@ class ParticleSystem {
         }
     }
     
+    emitTrail(position) {
+        // 拖尾效果：发射少量、生命周期短的小粒子
+        const geometry = ResourceManager.geometries.particle;
+        const material = ResourceManager.getColoredMaterial(0xffffff).clone();
+        material.transparent = true;
+        material.opacity = 0.5;
+        
+        const particle = new THREE.Mesh(geometry, material);
+        particle.position.copy(position);
+        particle.position.y += 0.5; // 从身体中心发射
+        
+        // 稍微随机一点位置
+        particle.position.x += (Math.random() - 0.5) * 0.2;
+        particle.position.z += (Math.random() - 0.5) * 0.2;
+        
+        particle.scale.setScalar(0.5); // 小一点
+        
+        this.scene.add(particle);
+        
+        // 拖尾粒子不移动，只缩小和淡出
+        this.particles.push({ 
+            mesh: particle, 
+            velocity: { x: 0, y: 0, z: 0 }, 
+            life: 0.5 // 短生命周期
+        });
+    }
+
     update() {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
