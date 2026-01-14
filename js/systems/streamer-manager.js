@@ -63,24 +63,42 @@ class StreamerManager {
         if (type === 'heart') icon = '❤️';
         else if (type === 'rocket') icon = '🚀';
         else if (type === 'bomb') icon = '💣';
+        else if (type === 'banana') icon = '🍌';
         
         this.ui.showToast(`${user} 送出了 ${icon}!`);
         
         if (type === 'rocket') {
             if (this.game.triggerFireworks) this.game.triggerFireworks();
             
-            if (this.game.isWaitingRevive()) {
+            // 只有在等待复活时才触发复活
+            if (this.game.isWaitingRevive && this.game.isWaitingRevive()) {
                 this.game.revivePlayer();
             } else {
                  this.game.addScore(50);
                  this.game.showFloatingScore(50);
             }
         } else if (type === 'bomb') {
-            this.game.setNextBlockBuff('small');
-            this.ui.showFloatingText('小心! 捣蛋鬼出没', 0xF56C6C);
+            // 随机触发一种陷阱
+            const traps = ['small', 'moving'];
+            const trap = traps[Math.floor(Math.random() * traps.length)];
+            this.game.setNextBlockBuff(trap);
+            
+            if (trap === 'small') this.ui.showFloatingText('小心! 捣蛋鬼让方块变小了', 0xF56C6C);
+            else this.ui.showFloatingText('小心! 捣蛋鬼让方块动起来了', 0xF56C6C);
+            
+        } else if (type === 'banana') {
+            this.game.setNextBlockBuff('moving');
+            this.ui.showFloatingText('小心香蕉皮! 方块打滑', 0xE6A23C);
         } else {
+            // Heart or others
             if (this.game.spawnHeartEffect) this.game.spawnHeartEffect();
-            this.game.addScore(5);
+            
+            // 如果是爱心，也可以复活
+            if (type === 'heart' && this.game.isWaitingRevive && this.game.isWaitingRevive()) {
+                 this.game.revivePlayer();
+            } else {
+                 this.game.addScore(5);
+            }
         }
     }
 }

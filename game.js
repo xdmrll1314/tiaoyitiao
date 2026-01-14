@@ -68,8 +68,8 @@ let cameraZoom = 1;                     // 相机缩放倍率
 let audioEnabled = true;            // 音效开关状态
 let nextBlockBuff = null;           // 下一个方块的特殊效果 ('large', 'small')
 let isWaitingRevive = false;        // 是否等待复活
-let reviveTimer = null;             // 复活倒计时
 let currentBlockScale = 1;          // 当前方块缩放比例
+let isStreamerMode = false;         // 是否处于主播模式
 
 // 多人模式变量
 let isSpectator = false;            // 是否为观战者
@@ -164,6 +164,7 @@ function init() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('mode') === 'streamer') {
         nickname = '主播';
+        isStreamerMode = true;
         startGame(); // 自动开始
         streamerManager.init();
     }
@@ -251,6 +252,15 @@ function setupEventListeners() {
         } else {
             alert('请输入昵称');
         }
+    });
+    
+    // 主播模式入口
+    document.getElementById('enter-streamer-mode').addEventListener('click', (e) => {
+        e.preventDefault();
+        nickname = '主播';
+        isStreamerMode = true;
+        startGame();
+        streamerManager.init();
     });
     
     // 引导页关闭按钮
@@ -379,6 +389,7 @@ function resetGame() {
         // 方块高度是 2，中心在 y=0，所以方块顶部是 y=1。
         // 玩家应该站在 y=1 的位置。
         player.position.set(0, 1, 0); 
+        player.userData.hasFailed = false; // 重置失败标记
         
         // 生成第二个方块
         spawnNextBlock(false);
@@ -478,12 +489,16 @@ function spawnNextBlock(animate = true) {
     let nextScale = 1;
     
     // 处理 Buff 效果
+    let isMoving = false;
     if (nextBlockBuff === 'large') {
         nextScale = 1.5;
         showFloatingText('方块变大!', 0xffff00);
     } else if (nextBlockBuff === 'small') {
         nextScale = 0.6;
         showFloatingText('小心陷阱!', 0xff0000);
+    } else if (nextBlockBuff === 'moving') {
+        isMoving = true;
+        showFloatingText('移动方块!', 0xff0000);
     }
     nextBlockBuff = null; 
     currentBlockScale = nextScale;
@@ -502,13 +517,29 @@ function spawnNextBlock(animate = true) {
     
     if (direction === 'x') {
         x -= distance;
-        targetRotationY = -Math.PI / 2; // 玩家需要转向
     } else {
         z -= distance;
-        targetRotationY = Math.PI; // 玩家需要转向
     }
     
-    createBlock(x, z, animate, nextScale);
+    const block = createBlock(x, z, animate, nextScale);
+
+    // 🎯 优化：让小人面向下一个方块的实际位置
+    // 即使小人在当前方块的边缘，也会准确转向目标中心
+    if (player) {
+        const dx = x - player.position.x;
+        const dz = z - player.position.z;
+        targetRotationY = Math.atan2(dx, dz);
+    }
+    
+    if (isMoving) {
+        // 设置移动属性
+        block.userData.isMoving = true;
+        block.userData.initialPos = { x, y: 0, z };
+        block.userData.moveAxis = direction; // 'x' or 'z'
+        block.userData.moveSpeed = 0.05;
+        block.userData.moveRange = 2.5; // 移动范围
+        block.userData.moveOffset = 0;
+    }
 }
 
 // 窗口调整处理
@@ -556,6 +587,10 @@ function onMouseUp(e) {
  * @param {number} duration - 蓄力时长(ms)
  */
 function jump(duration) {
+    // 1. 防止误触：如果蓄力时间太短，忽略（或给予最小跳跃力）
+    // 这里选择忽略极短的点击，防止玩家意外死亡
+    if (duration < 30) return;
+
     const maxTime = 1500; 
     // 计算力度：时长越长，力度越大
     const power = Math.min(duration, maxTime) * config.jumpFactor;
@@ -563,20 +598,15 @@ function jump(duration) {
     Logger.info("Physics", `跳跃! 蓄力时间: ${duration}ms, 力度: ${power.toFixed(2)}`);
 
     // 确定跳跃方向
-    const lastBlock = blocks[blocks.length - 2]; // 倒数第二个是当前所在方块
-    const nextBlock = blocks[blocks.length - 1]; // 倒数第一个是目标方块
-    
-    // 简单的方向判断：目标在左边还是前边？
-    let dir = { x: 0, z: 0 };
-    if (nextBlock.position.x < lastBlock.position.x) {
-        dir.x = -1; // 向 X 负方向
-    } else {
-        dir.z = -1; // 向 Z 负方向
-    }
+    // 优化：直接使用玩家当前的朝向进行跳跃
+    // 这样可以确保跳跃方向与视觉朝向一致（解决移动方块或边缘起跳的问题）
+    // Math.sin(y) 对应 X 轴分量, Math.cos(y) 对应 Z 轴分量
+    const dirX = Math.sin(player.rotation.y);
+    const dirZ = Math.cos(player.rotation.y);
     
     // 设置初始速度 (抛物线运动)
-    velocity.x = dir.x * power * 0.055;
-    velocity.z = dir.z * power * 0.055;
+    velocity.x = dirX * power * 0.055;
+    velocity.z = dirZ * power * 0.055;
     velocity.y = power * 0.08; // 垂直速度
     
     rotateSpeed = -0.15; // 空中翻滚速度
@@ -733,6 +763,28 @@ function animate() {
     if (cloudSystem) cloudSystem.update();
     if (rippleSystem) rippleSystem.update();
     
+    // 移动方块逻辑
+    blocks.forEach(block => {
+        if (block.userData.isMoving && isGameRunning) {
+            block.userData.moveOffset += block.userData.moveSpeed;
+            const offset = Math.sin(block.userData.moveOffset) * block.userData.moveRange;
+            
+            if (block.userData.moveAxis === 'x') {
+                block.position.z = block.userData.initialPos.z + offset; // 注意：如果是 X 轴方向的方块，它应该沿 Z 轴移动来增加难度？或者沿 X 轴移动改变距离？
+                // 通常跳一跳的移动方块是在垂直于跳跃方向的轴上移动，或者改变距离。
+                // 这里的 moveAxis 是生成方向。如果生成在 X 轴，玩家向 X 跳。
+                // 那么方块如果沿 Z 轴移动，会很难对准。如果沿 X 轴移动，是距离变化。
+                // 让我们设定为：沿垂直于跳跃方向移动（即左右晃动）
+                // 如果 moveAxis === 'x' (目标在左侧)，则沿 Z 轴晃动。
+                // 如果 moveAxis === 'z' (目标在前侧)，则沿 X 轴晃动。
+            } else {
+                block.position.x = block.userData.initialPos.x + offset;
+            }
+            
+            // 同步中心点位置 (如果需要的话，但 block.add(center) 已经是子物体了，会跟随移动)
+        }
+    });
+
     // 6. 渲染画面
     renderer.render(scene, camera);
 }
@@ -794,9 +846,31 @@ function updateCamera() {
  * ✅ 检查是否成功落地
  */
 function checkLanding() {
+    // 如果已经判定为失败，不再重复检测，防止音效爆炸和重复逻辑
+    if (player.userData.hasFailed) return false;
+
     const lastBlock = blocks[blocks.length - 1]; // 目标方块
+    const currentBlock = blocks[blocks.length - 2]; // 起跳方块
     
-    // 计算玩家与方块中心的距离
+    // 0. 检查是否原地起跳（落回当前方块）
+    // 这种情况不算成功也不算失败，允许玩家继续蓄力
+    const distToCurrent = Math.sqrt(
+        Math.pow(player.position.x - currentBlock.position.x, 2) + 
+        Math.pow(player.position.z - currentBlock.position.z, 2)
+    );
+    const currentBlockSize = (currentBlock.userData.scale || 1) * config.cubeSize.width / 2;
+    
+    if (distToCurrent < currentBlockSize + 0.3) {
+        // 安全落回原处
+        player.position.y = 1; 
+        velocity = { x: 0, y: 0, z: 0 }; 
+        rotateSpeed = 0;
+        innerPlayer.rotation.x = 0; 
+        audioManager.playLand();
+        return true; // 保持游戏继续，但不加分不生成新方块
+    }
+
+    // 计算玩家与目标方块中心的距离
     // 忽略 Y 轴，只看 X-Z 平面
     const dx = player.position.x - lastBlock.position.x;
     const dz = player.position.z - lastBlock.position.z;
@@ -805,10 +879,17 @@ function checkLanding() {
     // 判断是否在方块范围内
     // 方块宽度的一半约等于 2 (config.cubeSize.width / 2)
     // 稍微放宽一点判定范围
-    if (distance < config.cubeSize.width / 2 + 0.3) {
+    const targetBlockSize = (lastBlock.userData.scale || 1) * config.cubeSize.width / 2;
+
+    if (distance < targetBlockSize + 0.3) {
         
         // 成功落地!
         Logger.success("Game", "✅ 落地成功!");
+
+        // 停止方块移动，方便玩家进行下一次跳跃
+        if (lastBlock.userData.isMoving) {
+            lastBlock.userData.isMoving = false;
+        }
         
         // 生成波纹特效
         rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
@@ -854,24 +935,81 @@ function checkLanding() {
         
         return true;
         
-    } else if (distance < config.cubeSize.width / 2 + 1.5) {
+    } else if (distance < targetBlockSize + 1.5) {
         // 边缘掉落 (虽然碰到了但没站稳)
         Logger.warn("Game", "⚠️ 边缘滑落!");
-        audioManager.playFail(); // 修正：确保使用正确的 playFail 函数
+        if (!player.userData.hasFailed) {
+            audioManager.playFail(); 
+            player.userData.hasFailed = true; // 标记失败，防止重复触发
+        }
         return false;
     } else {
         // 完全没跳到
         Logger.error("Game", "❌ 跳跃失败!");
-        audioManager.playFail(); // 修正：确保使用正确的 playFail 函数
+        if (!player.userData.hasFailed) {
+            audioManager.playFail(); 
+            player.userData.hasFailed = true; // 标记失败
+        }
         return false;
     }
 }
+
+let reviveTimer = null;           // 复活倒计时定时器
 
 /**
  * ☠️ 游戏结束处理
  */
 function gameOver() {
     isGameRunning = false;
+    
+    // 如果已经在等待复活，不要重复触发
+    if (isWaitingRevive) return;
+    
+    // 只有在分数大于0时才允许复活，避免开局就死无限循环
+    // 并且如果是主播模式 (isStreamerMode 为 true)
+    if (score > 0 && isStreamerMode && !isWaitingRevive) {
+        startReviveCountdown();
+    } else {
+        finalizeGameOver();
+    }
+}
+
+function startReviveCountdown() {
+    isWaitingRevive = true;
+    Logger.info("Game", "等待复活...");
+    
+    // 显示倒计时 UI
+    const reviveUI = document.getElementById('revive-ui');
+    if (reviveUI) {
+        reviveUI.style.display = 'block';
+        let timeLeft = 5;
+        const countEl = reviveUI.querySelector('.count');
+        if (countEl) countEl.innerText = timeLeft;
+        
+        // 倒计时逻辑
+        reviveTimer = setInterval(() => {
+            timeLeft--;
+            if (countEl) countEl.innerText = timeLeft;
+            
+            if (timeLeft <= 0) {
+                finalizeGameOver();
+            }
+        }, 1000);
+    } else {
+        // 如果没有 UI，直接结束
+        finalizeGameOver();
+    }
+}
+
+function finalizeGameOver() {
+    if (reviveTimer) {
+        clearInterval(reviveTimer);
+        reviveTimer = null;
+    }
+    isWaitingRevive = false;
+    const reviveUI = document.getElementById('revive-ui');
+    if (reviveUI) reviveUI.style.display = 'none';
+    
     Logger.info("Game", `🏁 游戏结束! 最终得分: ${score}`);
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over').style.display = 'block';
@@ -969,12 +1107,32 @@ function updateConnectionStatusUI(status) {
 
 function revivePlayer() {
     isWaitingRevive = false;
-    if (reviveTimer) clearTimeout(reviveTimer);
+    if (reviveTimer) {
+        clearInterval(reviveTimer);
+        reviveTimer = null;
+    }
+    const reviveUI = document.getElementById('revive-ui');
+    if (reviveUI) reviveUI.style.display = 'none';
     
     // 重置位置到上一个安全方块
     const safeBlock = blocks[blocks.length - 2];
     player.position.set(safeBlock.position.x, 1, safeBlock.position.z);
+    
+    // 关键修复：重置物理和动画状态
     velocity = { x: 0, y: 0, z: 0 };
+    rotateSpeed = 0;
+    innerPlayer.rotation.x = 0; // 修复姿势
+    player.userData.hasFailed = false; // 修复复活后无法跳跃成功的问题
+    
+    // 重置朝向
+    const nextBlock = blocks[blocks.length - 1];
+    if (nextBlock) {
+        const dx = nextBlock.position.x - safeBlock.position.x;
+        const dz = nextBlock.position.z - safeBlock.position.z;
+        targetRotationY = Math.atan2(dx, dz);
+        player.rotation.y = targetRotationY; // 立即转向，避免复活时还在转圈
+    }
+
     isGameRunning = true;
     
     showFloatingText('复活成功!', 0x67C23A);

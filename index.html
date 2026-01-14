@@ -23,8 +23,19 @@
                 <button id="start-game-btn">开始游戏</button>
                 <button id="spectate-btn" class="secondary-btn">查看榜单</button>
             </div>
+            <div style="margin-top: 15px;">
+                <a href="#" id="enter-streamer-mode" style="color: #667eea; font-size: 14px; text-decoration: none;">进入主播演示模式 (测试互动)</a>
+            </div>
         </div>
     </div>
+    
+    <!-- 复活倒计时 UI -->
+    <div id="revive-ui" style="display: none; position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 50; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+        <h2 style="font-size: 24px; margin-bottom: 10px;">等待复活...</h2>
+        <div class="count" style="font-size: 60px; font-weight: bold; color: #ffeb3b;">5</div>
+        <p style="font-size: 16px; margin-top: 10px;">送出礼物 🚀 或 ❤️ 复活!</p>
+    </div>
+
     <div id="touch-indicator">长按蓄力 · 松开跳跃</div>
     <div id="power-bar-container">
         <div id="power-bar"></div>
@@ -60,7 +71,8 @@
             </div>
         </div>
     </div>
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- 使用 CDN 加载 Socket.io，确保即使本地没有 Socket.io 服务也能加载库 -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- 模块化引入 -->
     <script src="js/core/config.js"></script>

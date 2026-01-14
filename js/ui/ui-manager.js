@@ -70,6 +70,13 @@ class UIManager {
              if(onGiftCallback) onGiftCallback('捣蛋鬼', 'bomb');
         };
         simDiv.appendChild(bombBtn);
+
+        const bananaBtn = document.createElement('button');
+        bananaBtn.innerText = '模拟香蕉';
+        bananaBtn.onclick = () => {
+             if(onGiftCallback) onGiftCallback('捣蛋鬼', 'banana');
+        };
+        simDiv.appendChild(bananaBtn);
     }
 
     /**

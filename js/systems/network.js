@@ -17,7 +17,22 @@ class NetworkManager {
         Logger.info("Network", `🔗 开始连接服务器: ${nickname}`, "建立Socket.io长连接");
         this.nickname = nickname;
         this.notifyStatus('connecting');
-        this.socket = io();
+        
+        // 检查 socket.io 是否加载
+        if (typeof io === 'undefined') {
+            Logger.error("Network", "Socket.io 库未加载", "无法建立连接，进入单机模式");
+            this.notifyStatus('error');
+            return;
+        }
+
+        try {
+            this.socket = io();
+        } catch (e) {
+            Logger.error("Network", "连接失败", e.message);
+            this.notifyStatus('error');
+            return;
+        }
+
         this.setupHandlers();
         
         // 连接成功后发送昵称
