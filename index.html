@@ -29,6 +29,18 @@
                     <div class="char-option" data-type="hulk">绿巨人</div>
                     <div class="char-option" data-type="captain">美队</div>
                     <div class="char-option" data-type="thor">雷神</div>
+                    <div class="char-option" data-type="custom">DIY</div>
+                </div>
+                <div id="custom-settings" style="display: none; margin-top: 10px; padding: 10px; background: #f9f9f9; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <label>头:</label> <input type="color" id="color-head" value="#ffccaa">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <label>身:</label> <input type="color" id="color-body" value="#333333">
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <label>腿:</label> <input type="color" id="color-legs" value="#1976D2">
+                    </div>
                 </div>
             </div>
 
@@ -72,7 +84,7 @@
             <button id="restart-btn">再来一次</button>
         </div>
     </div>
-    <div id="guide-overlay">
+    <div id="guide-overlay" style="display: none;">
         <div class="guide-box">
             <h2>快速上手</h2>
             <ol>

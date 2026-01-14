@@ -1,5 +1,5 @@
 // 统一的角色创建函数
-function createCharacterMesh(isLocal, type = 'nezha') {
+function createCharacterMesh(isLocal, type = 'nezha', options = {}) {
     Logger.info("Entity", `👤 创建${isLocal ? "本地" : "远程"}角色模型`, `类型: ${type}`);
     const group = new THREE.Group();
     const inner = new THREE.Group();
@@ -14,6 +14,9 @@ function createCharacterMesh(isLocal, type = 'nezha') {
     // 根据类型创建不同的外观
     let meshGroup;
     switch (type) {
+        case 'custom':
+            meshGroup = createCustomCharacter(options.colors);
+            break;
         case 'wukong':
             meshGroup = createWukong();
             break;
@@ -453,6 +456,44 @@ function createThor() {
 
     hammerGroup.rotation.z = -0.5;
     group.add(hammerGroup);
+
+    return group;
+}
+
+// 7. DIY 自定义角色
+function createCustomCharacter(colors = {}) {
+    const group = new THREE.Group();
+    
+    // 默认颜色
+    const headColor = colors.head || '#ffccaa';
+    const bodyColor = colors.body || '#333333';
+    const legsColor = colors.legs || '#1976D2';
+    
+    const headMat = new THREE.MeshLambertMaterial({ color: headColor });
+    const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const legsMat = new THREE.MeshLambertMaterial({ color: legsColor });
+
+    // 头部 (简单的圆头)
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 1.6;
+    
+    const headGeo = new THREE.SphereGeometry(0.4, 32, 32);
+    const head = new THREE.Mesh(headGeo, headMat);
+    headGroup.add(head);
+    
+    group.add(headGroup);
+
+    // 身体
+    const bodyGeo = new THREE.CylinderGeometry(0.25, 0.3, 0.5, 32);
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 1.05;
+    group.add(body);
+    
+    // 腿部/下半身
+    const legsGeo = new THREE.CylinderGeometry(0.3, 0.35, 0.6, 32);
+    const legs = new THREE.Mesh(legsGeo, legsMat);
+    legs.position.y = 0.6;
+    group.add(legs);
 
     return group;
 }

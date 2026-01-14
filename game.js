@@ -240,6 +240,8 @@ function setupEventListeners() {
 
     // 角色选择逻辑
     const charOptions = document.querySelectorAll('.char-option');
+    const customSettings = document.getElementById('custom-settings');
+    
     charOptions.forEach(option => {
         option.addEventListener('click', () => {
             // 移除所有 active 类
@@ -248,6 +250,12 @@ function setupEventListeners() {
             option.classList.add('active');
             // 更新选择的角色
             selectedCharacterType = option.dataset.type;
+            
+            // 显示/隐藏自定义设置
+            if (customSettings) {
+                customSettings.style.display = selectedCharacterType === 'custom' ? 'block' : 'none';
+            }
+
             // 播放点击音效 (可选)
             if (audioManager && audioManager.playClick) audioManager.playClick();
         });
@@ -492,8 +500,17 @@ function createBlock(x, z, animate = false, scale = 1) {
  */
 function createPlayer() {
     Logger.info("Entities", "创建主角 Player");
+    
+    let options = {};
+    if (selectedCharacterType === 'custom') {
+        const headColor = document.getElementById('color-head').value;
+        const bodyColor = document.getElementById('color-body').value;
+        const legsColor = document.getElementById('color-legs').value;
+        options.colors = { head: headColor, body: bodyColor, legs: legsColor };
+    }
+
     // 调用实体工厂创建 Mesh
-    player = createCharacterMesh(true, selectedCharacterType);
+    player = createCharacterMesh(true, selectedCharacterType, options);
     scene.add(player);
 }
 
