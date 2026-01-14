@@ -16,7 +16,13 @@ class RippleSystem {
 
     spawn(position, color) {
         const mesh = new THREE.Mesh(this.geometry, this.material.clone());
-        if (color) mesh.material.color.setHex(color);
+        if (color) {
+             if (typeof color === 'number') {
+                 mesh.material.color.setHex(color);
+             } else {
+                 mesh.material.color.set(color);
+             }
+        }
         // 确保波纹在方块上方一点点
         mesh.position.copy(position);
         mesh.position.y = 1.05; 

@@ -388,6 +388,7 @@ function resetGame() {
     // 2. 重置变量
     score = 0;
     combo = 0;
+    updatePlayerGlow(0); // 重置发光
     updateScoreUI();
     isGameRunning = true;
     velocity = { x: 0, y: 0, z: 0 };
@@ -538,9 +539,11 @@ function spawnNextBlock(animate = true) {
 
     // 计算距离
     const lastScale = lastBlock.userData.scale || 1;
-    // 最小距离保证不重叠，最大距离随机
     const minDistance = 2 * lastScale + 2 * nextScale + 2; 
-    const distance = minDistance + Math.random() * 4; 
+    // 最小距离保证不重叠，最大距离随分数增加而增加 (难度提升)
+    const difficultyMultiplier = Math.min(score / 50, 2); // 0 -> 2
+    const distanceRange = 4 + difficultyMultiplier * 3; 
+    const distance = minDistance + Math.random() * distanceRange; 
     
     // 随机决定方向：向左(X) 或 向前(Z)
     const direction = Math.random() > 0.5 ? 'x' : 'z';
@@ -803,24 +806,46 @@ function animate() {
             const offset = Math.sin(block.userData.moveOffset) * block.userData.moveRange;
             
             if (block.userData.moveAxis === 'x') {
-                block.position.z = block.userData.initialPos.z + offset; // 注意：如果是 X 轴方向的方块，它应该沿 Z 轴移动来增加难度？或者沿 X 轴移动改变距离？
-                // 通常跳一跳的移动方块是在垂直于跳跃方向的轴上移动，或者改变距离。
-                // 这里的 moveAxis 是生成方向。如果生成在 X 轴，玩家向 X 跳。
-                // 那么方块如果沿 Z 轴移动，会很难对准。如果沿 X 轴移动，是距离变化。
-                // 让我们设定为：沿垂直于跳跃方向移动（即左右晃动）
-                // 如果 moveAxis === 'x' (目标在左侧)，则沿 Z 轴晃动。
-                // 如果 moveAxis === 'z' (目标在前侧)，则沿 X 轴晃动。
+                block.position.z = block.userData.initialPos.z + offset; 
             } else {
                 block.position.x = block.userData.initialPos.x + offset;
             }
-            
-            // 同步中心点位置 (如果需要的话，但 block.add(center) 已经是子物体了，会跟随移动)
         }
     });
 
     // 6. 渲染画面
     renderer.render(scene, camera);
 }
+
+function updatePlayerGlow(comboLevel) {
+    if (!player) return;
+    
+    let glowColor = 0x000000;
+    let intensity = 0;
+    
+    if (comboLevel >= 5) {
+        glowColor = 0xff0000; // 红色怒气
+        intensity = 0.5;
+    } else if (comboLevel >= 3) {
+        glowColor = 0xffd700; // 金色光芒
+        intensity = 0.3;
+    }
+    
+    player.traverse(child => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => {
+                    if (m.emissive) m.emissive.setHex(glowColor);
+                    if (m.emissiveIntensity !== undefined) m.emissiveIntensity = intensity;
+                });
+            } else {
+                if (child.material.emissive) child.material.emissive.setHex(glowColor);
+                if (child.material.emissiveIntensity !== undefined) child.material.emissiveIntensity = intensity;
+            }
+        }
+    });
+}
+
 
 /**
  * 📸 更新相机位置 (平滑跟随)
@@ -924,8 +949,8 @@ function checkLanding() {
             lastBlock.userData.isMoving = false;
         }
         
-        // 生成波纹特效
-        rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
+        // 生成波纹特效 (Moved to if/else block for specific colors)
+        // rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
         
         // 播放音效
         audioManager.playLand();
@@ -935,21 +960,28 @@ function checkLanding() {
             combo++;
             score += 2 * combo; // 连击加分
             showFloatingScore(2 * combo, true);
+            showFloatingText('Perfect!', 0xffd700); // 金色提示
             
             // 完美落地音效
             audioManager.playScore(combo);
             
             // 震动特效
-            cameraShake = { x: (Math.random()-0.5), y: (Math.random()-0.5), z: (Math.random()-0.5) };
+            cameraShake = { x: (Math.random()-0.5)*2, y: (Math.random()-0.5)*2, z: (Math.random()-0.5)*2 };
             
-            // 完美落地特效
-            particleSystem.emit(player.position, 0xffeb3b, 30);
+            // 完美落地特效 (金色波纹 + 更多粒子)
+            rippleSystem.spawn(lastBlock.position, 0xffd700);
+            particleSystem.emit(player.position, 0xffd700, 50);
+            
+            // 更新角色发光
+            updatePlayerGlow(combo);
             
         } else {
             combo = 0;
+            updatePlayerGlow(0); // 重置发光
             score += 1;
             showFloatingScore(1, false);
             // 普通落地特效
+            rippleSystem.spawn(lastBlock.position, lastBlock.userData.color);
             particleSystem.emit(player.position, 0xffffff, 15);
         }
         
